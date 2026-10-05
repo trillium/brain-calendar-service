@@ -58,7 +58,7 @@ export class DeleteRefusal extends Error {
   }
 }
 
-const assertPermitted = (policy: SyncPolicy, calendarId: string, op: Operation): void => {
+export const assertPermitted = (policy: SyncPolicy, calendarId: string, op: Operation): void => {
   if (!policy.permitted.has(key(calendarId, op))) throw new PolicyViolation(calendarId, op);
 };
 

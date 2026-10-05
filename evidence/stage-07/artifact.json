@@ -1,0 +1,33 @@
+{
+  "stage": "S7",
+  "gate": "dry-run proves its own inertness by observation, and the plan is internally consistent",
+  "dryRunObservations": [
+    "row deltas per affected table, read back from the store",
+    "provider calls, asserted read-only (no PUT/DELETE/POST)",
+    "git head before and after"
+  ],
+  "verifyPlanChecks": [
+    "every write names what it writes",
+    "every external write carries an idempotency key",
+    "nothing is both a push and a pull",
+    "no write is scheduled for an unchanged pair",
+    "no row delta",
+    "no mutating provider call",
+    "git head unmoved"
+  ],
+  "quarantine": {
+    "sink": "calendar_conflict",
+    "automaticExit": false,
+    "firstAction": "full resync request, recorded rather than an empty diff"
+  },
+  "livePath": {
+    "command": "pnpm run sync:once --calendar cal-1",
+    "result": "conflicts_quarantined=0"
+  },
+  "tests": {
+    "files": ["src/sync/orchestration/orchestration.test.ts"],
+    "total": 86,
+    "orderIndependent": true
+  },
+  "knownDeviations": ["apply path calls no provider yet; see skips.md"]
+}
