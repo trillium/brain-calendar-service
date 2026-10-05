@@ -20,7 +20,7 @@
     "errors": "partial",
     "utilities": "conformant"
   },
-  "verbatimDrift": [".husky/large-files-allowlist.txt"],
+  "verbatimDrift": [],
   "adaptations": [
     {
       "file": "biome.json",
@@ -56,6 +56,11 @@
       "file": "scripts/next-migration.sh",
       "exists": true,
       "reason": "C4: migration directory re-pointed from supabase/migrations to migrations/."
+    },
+    {
+      "file": ".husky/large-files-allowlist.txt",
+      "exists": true,
+      "reason": "One entry added: scripts/canon-audit.mjs. The S0 conformance gate and AGENTS.md's generator are one file on purpose - splitting the thing that checks conformance is worse than one file 35 lines over a soft cap - with the reason and a revisit point recorded in canon-profile.json. Revisit at S9, when the 250-line guard becomes a merge condition."
     },
     {
       "file": "scripts/db-migrate.mjs",
@@ -138,8 +143,6 @@
     }
   ],
   "canonAdaptation": "Canon's canonical biome.json does not parse under any currently installable Biome (verified against 1.9.4, 2.4.16 and 2.5.15) even though Canon's own package.json declares @biomejs/biome ^2.4.0. S0 therefore carries the minimum mechanical renames needed to parse, each declared with its reason in scripts/canon-audit.mjs, and files the upstream defect as a canon-extension item rather than working around it silently.",
-  "failures": [
-    ".husky/large-files-allowlist.txt: drifted from Canon (ours c3bef1a4a71e, canon 0ac44d6f05c6)"
-  ],
-  "passed": false
+  "failures": [],
+  "passed": true
 }

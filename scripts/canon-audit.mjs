@@ -35,7 +35,6 @@ const VERBATIM = [
   ".husky/pre-commit",
   ".husky/pre-push",
   ".husky/commit-msg",
-  ".husky/large-files-allowlist.txt",
 ];
 
 // Copied from Canon and deliberately changed. Each adaptation names the plan
@@ -53,6 +52,8 @@ const ADAPTED = {
   "cspell.json": "project dictionary extended with calendar/Dolt vocabulary.",
   "scripts/next-migration.sh":
     "C4: migration directory re-pointed from supabase/migrations to migrations/.",
+  ".husky/large-files-allowlist.txt":
+    "One entry added: scripts/canon-audit.mjs. The S0 conformance gate and AGENTS.md's generator are one file on purpose - splitting the thing that checks conformance is worse than one file 35 lines over a soft cap - with the reason and a revisit point recorded in canon-profile.json. Revisit at S9, when the 250-line guard becomes a merge condition.",
   "scripts/db-migrate.mjs":
     "Project script, not a Canon file. Applies this repo's own Dolt migrations to this repo's own store (decision-4wh); records applied migrations in dolt history rather than in a local bookkeeping file.",
   "scripts/db-verify.mjs":
