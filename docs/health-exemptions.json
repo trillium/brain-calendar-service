@@ -1,0 +1,18 @@
+{
+  "$comment": "R1: an exception is an exception with a mechanism - a reason, a revisit point, and a removal condition. Every entry corresponds to a concrete suppression in .fallowrc.json, and scripts/canon-audit.mjs fails if the two files disagree. That is the difference between an exemption and a convention.",
+  "exemptions": [
+    {
+      "suppression": "duplicates.ignore",
+      "value": "src/adapters/**",
+      "reason": "Adapter code is deliberately thin and repetitive: every adapter does the same request/response mapping against a different provider. The plan holds adapters to a much lower duplication bar because the real constraint is not repetition but leakage - which is what the fallow boundary-violations=error rule on domain/ports/adapters enforces at rung 2.",
+      "removalCondition": "Re-examine when a second adapter lands at S6. If the two adapters diverge rather than repeat, delete this entry rather than widening it.",
+      "owner": "S6"
+    }
+  ],
+  "notExemptions": [
+    {
+      "item": "scripts/check-no-emoji.mjs declared in .fallowrc.json entry",
+      "whyItIsNotAnExemption": "fallow reported it as an unused file because its husky and lint-staged plugins do not resolve the shell-form reference \"node scripts/check-no-emoji.mjs\". Rather than suppress the report, the script is declared an entry point, which is what it actually is: it is invoked on every commit. A suppression here would have hidden a real reference the tool simply cannot see."
+    }
+  ]
+}

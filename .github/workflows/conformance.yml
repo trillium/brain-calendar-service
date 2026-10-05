@@ -1,0 +1,33 @@
+name: Canon conformance
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  canon-audit:
+    name: Canon Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Drift from Canon is a CI failure, not an opinion: verbatim files are
+      # compared by sha256 against the canonical copy, and every adaptation must
+      # be declared with a reason in scripts/canon-audit.mjs.
+      - uses: actions/checkout@v4
+        with:
+          repository: trillium/canon
+          ref: f714673
+          path: .canon
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run canon:audit
+        env:
+          CANON_ROOT: ${{ github.workspace }}/.canon

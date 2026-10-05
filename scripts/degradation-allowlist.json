@@ -1,0 +1,4 @@
+{
+  "$comment": "R8. Every degraded path must surface as an explicit typed state and fail its stage, UNLESS it appears here. An entry is an exception with three parts, and the format is not negotiable: a reason, an expiry date, and a human's approval. An entry past its expiry fails the audit rather than being silently ignored.",
+  "entries": []
+}

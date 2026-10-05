@@ -1,0 +1,34 @@
+{
+  "$schema": "https://fallow.tools/schemas/fallowrc.json",
+  "ignorePatterns": [
+    "**/*.test.*",
+    "**/*.spec.*",
+    "**/*.stories.*",
+    "**/*.generated.*",
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/.next/**",
+    "**/coverage/**"
+  ],
+  "ignoreDependencies": ["@types/node"],
+  "rules": {
+    "unused-files": "warn",
+    "unused-exports": "warn",
+    "unused-types": "warn",
+    "unused-deps": "warn",
+    "circular-dependencies": "error",
+    "boundary-violations": "error",
+    "stale-suppressions": "warn"
+  },
+  "duplicates": {
+    "threshold": 8,
+    "mode": "semantic",
+    "ignore": ["src/adapters/**"]
+  },
+  "health": {
+    "cyclomatic": 10,
+    "cognitive": 15
+  },
+  "entry": ["scripts/*.mjs", "scripts/*.sh", "migrations/**"]
+}

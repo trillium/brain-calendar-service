@@ -1,0 +1,41 @@
+{
+  "version": "0.2",
+  "language": "en-US",
+  "dictionaryDefinitions": [
+    {
+      "name": "project-words",
+      "path": "./.cspell/project-words.txt",
+      "addWords": true
+    }
+  ],
+  "dictionaries": ["typescript", "node", "npm", "html", "css", "software-terms", "project-words"],
+  "files": ["**/*.{md,mdx,ts,tsx}"],
+  "ignorePaths": [
+    "node_modules/**",
+    ".next/**",
+    "dist/**",
+    "build/**",
+    "coverage/**",
+    "public/**",
+    "**/*.config.*",
+    "pnpm-lock.yaml",
+    "package-lock.json",
+    "yarn.lock",
+    "*.log",
+    ".git/**"
+  ],
+  "ignoreRegExpList": [
+    "```[\\s\\S]*?```",
+    "`[^`]*`",
+    "\\{[^}]*\\}",
+    "className=\"[^\"]*\"",
+    "href=\"[^\"]*\"",
+    "src=\"[^\"]*\"",
+    "import\\s+.*?from\\s+['\"][^'\"]*['\"]",
+    "@[a-zA-Z]+",
+    "\\w+:\\w+",
+    "/\\*[\\s\\S]*?\\*/",
+    "//.*$"
+  ],
+  "allowCompoundWords": true
+}

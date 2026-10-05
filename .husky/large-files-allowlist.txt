@@ -1,0 +1,6 @@
+# Large file allowlist — one glob pattern per line.
+# Files matching these patterns are exempt from the 250-line guard.
+# Examples:
+# src/generated/*
+# prisma/schema.prisma
+# src/data/*.csv

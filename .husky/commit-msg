@@ -1,0 +1,59 @@
+#!/usr/bin/env sh
+
+COMMIT_MSG_FILE="$1"
+
+# --- Commit message auto-fix ---
+# Auto-trim trailing whitespace from the first line
+sed -i '' -e '1s/[[:space:]]*$//' "$COMMIT_MSG_FILE" 2>/dev/null || \
+  sed -i -e '1s/[[:space:]]*$//' "$COMMIT_MSG_FILE"
+
+# Auto-lowercase the first letter after the type(scope): prefix
+# e.g. "feat: Fix bug" -> "feat: fix bug"
+if command -v perl >/dev/null 2>&1; then
+  perl -i -pe 's/^([a-z]+(\([^)]*\))?:\s+)([A-Z])/\1\l\3/ if $. == 1' "$COMMIT_MSG_FILE"
+fi
+
+MSG=$(head -1 "$COMMIT_MSG_FILE")
+
+# --- Merge commit blocker ---
+# Reject default merge messages — require semantic format even for merges.
+if echo "$MSG" | grep -qE '^Merge (branch|remote-tracking branch|pull request)'; then
+  echo ""
+  echo "ERROR: Default merge commit messages are not allowed."
+  echo ""
+  echo "  Use squash merge instead:"
+  echo "    git merge --squash <branch>"
+  echo "    git commit -m \"feat(scope): description\""
+  echo ""
+  echo "  Or provide a semantic message:"
+  echo "    git merge <branch> -m \"chore(scope): merge description\""
+  echo ""
+  echo "  Bypass (rare): git commit --no-verify"
+  echo ""
+  exit 1
+fi
+
+# --- Conventional commit validation ---
+# Semantic commit pattern: type(optional-scope): description
+# Allowed types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert, init
+pattern="^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|init)(\([a-z0-9 ,_-]+\))?: .{1,100}"
+
+if ! echo "$MSG" | grep -qE "$pattern"; then
+  echo ""
+  echo "ERROR: Commit message does not follow conventional commit format."
+  echo ""
+  echo "  Format: <type>(<scope>): <description>"
+  echo ""
+  echo "  Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert, init"
+  echo "  Scope: optional, lowercase (e.g. auth, db, ui)"
+  echo ""
+  echo "  Examples:"
+  echo "    feat(auth): add magic link sign-in"
+  echo "    fix(db): correct RLS policy for expenses"
+  echo "    docs: update implementation plan"
+  echo "    chore(deps): bump next to 16.1"
+  echo ""
+  echo "  Your message: \"$MSG\""
+  echo ""
+  exit 1
+fi

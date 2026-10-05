@@ -1,0 +1,27 @@
+#!/usr/bin/env sh
+
+# --- Protected branch push guard ---
+# Blocks direct pushes to main and master. Use pull requests instead.
+
+# Skip when running in CI
+if [ "$CI" = "true" ] || [ "$GITHUB_ACTIONS" = "true" ]; then
+  exit 0
+fi
+
+current_branch=$(git branch --show-current)
+
+if [ "$current_branch" = "main" ] || [ "$current_branch" = "master" ]; then
+  echo "error: Direct pushes to '$current_branch' are not allowed."
+  echo ""
+  echo "  Create a feature branch and open a pull request instead:"
+  echo "    git checkout -b feat/my-feature"
+  echo "    git push -u origin feat/my-feature"
+  echo ""
+  echo "  Bypass (rare): git push --no-verify"
+  exit 1
+fi
+
+# --- Codebase health check (if codebase-health module is active) ---
+if [ -f "scripts/fallow-prepush.sh" ]; then
+  bash scripts/fallow-prepush.sh
+fi
