@@ -26,7 +26,8 @@
     "sync:measure": "tsx scripts/sync-measure.mts",
     "sync:once": "tsx scripts/sync-once.mts",
     "sync:verify-plan": "tsx scripts/sync-verify-plan.mts",
-    "mcp:smoke": "tsx scripts/mcp-smoke.mts"
+    "mcp:smoke": "tsx scripts/mcp-smoke.mts",
+    "size:check": "node scripts/size-check.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",

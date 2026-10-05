@@ -27,7 +27,7 @@ export const LIMITS = {
   bytesPerEventMax: 32768,
 } as const;
 
-export interface PrivateProperties {
+interface PrivateProperties {
   readonly [key: string]: string;
 }
 
@@ -70,7 +70,7 @@ export const assertWithinGoogleLimits = (props: PrivateProperties): void => {
   }
 };
 
-export type DeleteIntent = "cancel_instance" | "delete_event";
+type DeleteIntent = "cancel_instance" | "delete_event";
 
 /**
  * Decide what a cancelled event means.

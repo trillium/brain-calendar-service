@@ -1,0 +1,35 @@
+{
+  "stage": "S9",
+  "gate": "G7 - the repo is safe to point an unattended loop at",
+  "sizeCheck": {
+    "limit": 250,
+    "status": "merge condition, not a warning",
+    "filesChecked": 33,
+    "violations": 0,
+    "allowlist": ".husky/large-files-allowlist.txt - the same file the pre-commit hook reads, so the two cannot disagree",
+    "autoExempt": ["*.test.*", "*.generated.*", "*.d.ts"]
+  },
+  "health": {
+    "fallow": "clean, no issues",
+    "staleSuppressions": 0
+  },
+  "verificationSkill": {
+    "sections": ["Launch", "Doctor", "Drive", "Evidence", "Cleanup", "Helpers"],
+    "path": "verification/SKILL.md"
+  },
+  "featureMap": {
+    "files": 7,
+    "areas": ["rfc5546", "recurrence", "changedetection", "loop", "caldav", "orchestration", "mcp"],
+    "sweepOrder": "verification/references/features/README.md",
+    "headings": [
+      "what it is",
+      "how to drive it",
+      "what it should produce",
+      "what breaks if it breaks"
+    ],
+    "driftRule": "a change touching a domain area updates that area file in the same commit"
+  },
+  "exitCommand": "pnpm run size:check && pnpm run health && pnpm run type-check && pnpm run lint && pnpm run test -- --run",
+  "exitResult": "green, 93 tests",
+  "whyItIsAStage": "the plan asks whether the repo is safe to point an unattended loop at; conformant is not the same as drivable, and R4/R5/R6 all need somewhere to put the evidence they capture"
+}
