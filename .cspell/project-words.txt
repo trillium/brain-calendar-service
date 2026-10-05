@@ -48,6 +48,9 @@ lintstaged
 materialise
 materialised
 materialises
+mcp
+Mcp
+McpServer
 mdx
 mjs
 mulberry
@@ -69,12 +72,14 @@ RRULE
 rrules
 Santiago
 Sao
+stdio
 sync
 SYNC
 sync-token
 synccollection
 syncs
 tee
+tspan
 tzdata
 tzid
 uid
@@ -89,3 +94,5 @@ VEVENTs
 VTIMEZONE
 vtimezoneShanghai
 xml
+Zod
+zodToJsonSchema

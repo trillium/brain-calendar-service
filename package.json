@@ -25,11 +25,14 @@
     "sync:converge": "tsx scripts/sync-converge.mts",
     "sync:measure": "tsx scripts/sync-measure.mts",
     "sync:once": "tsx scripts/sync-once.mts",
-    "sync:verify-plan": "tsx scripts/sync-verify-plan.mts"
+    "sync:verify-plan": "tsx scripts/sync-verify-plan.mts",
+    "mcp:smoke": "tsx scripts/mcp-smoke.mts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
     "ical.js": "^2.2.1",
-    "mysql2": "^3.24.5"
+    "mysql2": "^3.24.5",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",
