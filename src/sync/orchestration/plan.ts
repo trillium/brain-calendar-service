@@ -67,7 +67,7 @@ const tableCount = async (conn: Connection, table: string): Promise<number> => {
   return Number(rows[0].n);
 };
 
-export interface CycleInput {
+interface CycleInput {
   readonly conn: Connection;
   readonly calendarId: string;
   readonly provider: string;

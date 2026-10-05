@@ -16,7 +16,7 @@
 //   2. Every method the loop may call is named, so the deny-by-default policy
 //      has something concrete to check against.
 
-export type CalDavMethod = "PROPFIND" | "REPORT" | "PUT" | "DELETE" | "GET" | "HEAD";
+type CalDavMethod = "PROPFIND" | "REPORT" | "PUT" | "DELETE" | "GET" | "HEAD";
 
 export interface RequestRecord {
   method: CalDavMethod;
@@ -26,7 +26,7 @@ export interface RequestRecord {
   ms: number;
 }
 
-export interface Transport {
+interface Transport {
   request(
     method: CalDavMethod,
     url: string,
@@ -83,7 +83,7 @@ export const fetchTransport = (
 };
 
 /** Total cost of a CTag + ETag style scan: what dominated, not just the number. */
-export interface CostProfile {
+interface CostProfile {
   requests: number;
   bytes: number;
   ms: number;

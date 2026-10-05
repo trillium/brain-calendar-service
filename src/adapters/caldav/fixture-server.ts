@@ -8,14 +8,14 @@
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
-export interface FixtureEvent {
+interface FixtureEvent {
   href: string;
   etag: string;
   status: number;
   calendarData: string;
 }
 
-export interface FixtureOptions {
+interface FixtureOptions {
   events: readonly FixtureEvent[];
   /** Token the server will accept; anything else gets the 403 the spec requires. */
   validSyncToken: string;
