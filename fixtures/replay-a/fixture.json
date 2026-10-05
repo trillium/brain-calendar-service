@@ -1,0 +1,38 @@
+{
+  "name": "replay-a",
+  "description": "Recorded external calendar state plus the edit script. Deterministic: the same fixture and the same round count must always produce the same write log.",
+  "initial": [
+    {
+      "uid": "evt-standup@example.com",
+      "privateBeadId": "brain-standup",
+      "sequence": 0,
+      "dtstamp": "2026-01-01T09:00:00Z",
+      "summary": "Standup",
+      "startUtc": "2026-03-02T14:00:00.000Z",
+      "durationSeconds": 900
+    },
+    {
+      "uid": "evt-review@example.com",
+      "privateBeadId": "brain-review",
+      "sequence": 0,
+      "dtstamp": "2026-01-01T09:00:00Z",
+      "summary": "Design review",
+      "startUtc": "2026-03-04T17:00:00.000Z",
+      "durationSeconds": 3600
+    }
+  ],
+  "steps": [
+    {
+      "label": "move the standup",
+      "localEdit": { "beadId": "brain-standup", "startUtc": "2026-03-02T15:00:00.000Z" }
+    },
+    {
+      "label": "someone reschedules the review in the calendar UI",
+      "remoteEdit": { "uid": "evt-review@example.com", "startUtc": "2026-03-04T19:00:00.000Z" }
+    },
+    {
+      "label": "move the standup again",
+      "localEdit": { "beadId": "brain-standup", "startUtc": "2026-03-02T16:00:00.000Z" }
+    }
+  ]
+}
