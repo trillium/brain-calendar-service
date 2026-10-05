@@ -22,7 +22,8 @@
     "build:timezones": "node scripts/build-timezones.mjs",
     "build:timezones:check": "node scripts/build-timezones.mjs --check",
     "sync:replay": "tsx scripts/sync-replay.mts",
-    "sync:converge": "tsx scripts/sync-converge.mts"
+    "sync:converge": "tsx scripts/sync-converge.mts",
+    "sync:measure": "tsx scripts/sync-measure.mts"
   },
   "dependencies": {
     "ical.js": "^2.2.1",

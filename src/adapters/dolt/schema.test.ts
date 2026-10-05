@@ -55,7 +55,15 @@ describe("live schema matches the claimed schema", () => {
       "SELECT table_name FROM information_schema.tables WHERE table_schema = ?",
       [config.database],
     );
-    const present = rows.map((r) => r.table_name ?? r.TABLE_NAME).sort();
+    // A suite that owns a transient substrate (change detection creates and
+    // drops its own probe table) may be running concurrently. That table is
+    // explicitly NOT part of the schema, so it is named here rather than
+    // letting an unrelated suite fail this one.
+    const TRANSIENT = "sync_probe_period";
+    const present = rows
+      .map((r) => r.table_name ?? r.TABLE_NAME)
+      .filter((t) => t !== TRANSIENT)
+      .sort();
     expect(present).toEqual([...TABLE_NAMES].sort());
   });
 });
