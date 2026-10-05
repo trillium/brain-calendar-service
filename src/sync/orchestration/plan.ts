@@ -23,32 +23,32 @@ import type { Occurrence } from "../../domain/rfc5546/types.js";
 import { detectChanges } from "../changedetection/plan.js";
 import { allow, assertPermitted, type SyncPolicy } from "../loop/policy.js";
 
-export interface PlanPush {
+interface PlanPush {
   beadId: string;
   externalUid: string;
   reason: string;
 }
 
-export interface PlanPull {
+interface PlanPull {
   beadId: string;
   externalUid: string;
   reason: string;
 }
 
-export interface Quarantine {
+interface Quarantine {
   beadId: string | null;
   externalUid: string | null;
   reason: string;
 }
 
-export interface Observations {
+interface Observations {
   rowDeltas: Record<string, number>;
   providerCalls: { method: string }[];
   gitHeadBefore: string | null;
   gitHeadAfter: string | null;
 }
 
-export interface SyncPlan {
+interface SyncPlan {
   calendarId: string;
   dryRun: boolean;
   cursorBefore: string | null;

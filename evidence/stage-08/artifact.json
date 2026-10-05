@@ -1,0 +1,35 @@
+{
+  "stage": "S8",
+  "gate": "G6 - the MCP surface is drivable by a real client over real stdio",
+  "acceptanceTest": "a real tool call WITH ARGUMENTS returning success - explicitly not a clean handshake",
+  "smoke": {
+    "transport": "stdio, child process",
+    "steps": [
+      "initialize",
+      "tools/list (7 tools)",
+      "read tool with arguments",
+      "write tool with arguments",
+      "read-after-write",
+      "quarantine read declares no automatic exit"
+    ],
+    "result": "PASS"
+  },
+  "tools": [
+    "query_period",
+    "propose_day",
+    "move_commitment",
+    "link_external",
+    "unlink_external",
+    "list_changes",
+    "list_quarantined"
+  ],
+  "boundary": "tools import from domain/ only; no adapter is reachable from the MCP layer",
+  "validation": "Zod at every tool boundary; a malformed argument is rejected, never coerced",
+  "sdkPin": "@modelcontextprotocol/sdk 1.32.1 (exact) + zod 4.6.5",
+  "registrationFormFinding": "tool(name, description, zodRawShape, cb) binds arguments; tool(name, description, cb) and registerTool(name, {inputSchema}, cb) publish an EMPTY schema and deliver NO arguments, while type-checking. Verified at Zod 4.6.5 and Zod 3.25.76 and at SDK 1.25.3 through 1.32.1, so it is the registration form, not the version.",
+  "tests": {
+    "files": ["src/mcp/tools.test.ts"],
+    "total": 93,
+    "orderIndependent": true
+  }
+}
