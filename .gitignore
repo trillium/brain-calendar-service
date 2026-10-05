@@ -38,3 +38,4 @@ supabase/.temp
 .sentryclirc
 .local-dolt/
 .local-dolt-data/
+.fallow/
