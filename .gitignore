@@ -36,3 +36,5 @@ supabase/.temp
 
 # sentry
 .sentryclirc
+.local-dolt/
+.local-dolt-data/

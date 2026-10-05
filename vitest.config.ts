@@ -11,8 +11,5 @@ export default defineConfig({
     environment: "node",
     globals: true,
     include: ["src/**/*.{test,spec}.ts"],
-    // S0 deliberately ships zero domain files, so an empty suite is the
-    // correct state here rather than a failure. S1 removes this.
-    passWithNoTests: true,
   },
 });

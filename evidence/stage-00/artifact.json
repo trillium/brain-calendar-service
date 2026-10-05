@@ -20,7 +20,7 @@
     "errors": "partial",
     "utilities": "conformant"
   },
-  "verbatimDrift": [],
+  "verbatimDrift": [".husky/large-files-allowlist.txt"],
   "adaptations": [
     {
       "file": "biome.json",
@@ -56,6 +56,26 @@
       "file": "scripts/next-migration.sh",
       "exists": true,
       "reason": "C4: migration directory re-pointed from supabase/migrations to migrations/."
+    },
+    {
+      "file": "scripts/db-migrate.mjs",
+      "exists": true,
+      "reason": "Project script, not a Canon file. Applies this repo's own Dolt migrations to this repo's own store (decision-4wh); records applied migrations in dolt history rather than in a local bookkeeping file."
+    },
+    {
+      "file": "scripts/db-verify.mjs",
+      "exists": true,
+      "reason": "Project script, not a Canon file. Asserts the live store matches src/adapters/dolt/schema.mjs by table, column and index name, including the load-bearing columns."
+    },
+    {
+      "file": "scripts/gen-dolt-types.mjs",
+      "exists": true,
+      "reason": "Project script, not a Canon file. Generates row types from the declared schema so the types cannot drift from the claim."
+    },
+    {
+      "file": "scripts/start-local-dolt.sh",
+      "exists": true,
+      "reason": "Project script, not a Canon file. Starts the DISPOSABLE Dolt server S1 verifies against, so an autonomous worker does not administer the fleet-shared one."
     },
     {
       "file": ".github/workflows/ci.yml",
@@ -118,6 +138,8 @@
     }
   ],
   "canonAdaptation": "Canon's canonical biome.json does not parse under any currently installable Biome (verified against 1.9.4, 2.4.16 and 2.5.15) even though Canon's own package.json declares @biomejs/biome ^2.4.0. S0 therefore carries the minimum mechanical renames needed to parse, each declared with its reason in scripts/canon-audit.mjs, and files the upstream defect as a canon-extension item rather than working around it silently.",
-  "failures": [],
-  "passed": true
+  "failures": [
+    ".husky/large-files-allowlist.txt: drifted from Canon (ours c3bef1a4a71e, canon 0ac44d6f05c6)"
+  ],
+  "passed": false
 }

@@ -1,5 +1,5 @@
 {
-  "name": "calendar-service",
+  "name": "brain-calendar-service",
   "version": "0.0.0",
   "private": true,
   "description": "MCP-facing calendar and temporal-planning service; Beads/Dolt is the authoritative planning layer.",
@@ -13,9 +13,16 @@
     "health:audit": "fallow audit --format json",
     "canon:audit": "node scripts/canon-audit.mjs",
     "spellcheck": "cspell lint --no-must-find-files '**/*.{md,mdx,ts,tsx}'",
-    "prepare": "husky || true"
+    "prepare": "husky || true",
+    "db:server": "bash scripts/start-local-dolt.sh start",
+    "db:server:stop": "bash scripts/start-local-dolt.sh stop",
+    "db:migrate": "node scripts/db-migrate.mjs",
+    "db:verify": "node scripts/db-verify.mjs",
+    "gen:dolt-types": "node scripts/gen-dolt-types.mjs"
   },
-  "dependencies": {},
+  "dependencies": {
+    "mysql2": "^3.24.5"
+  },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",
     "@types/node": "^22.0.0",
@@ -27,11 +34,11 @@
     "vitest": "^4.1.0"
   },
   "lint-staged": {
-    "*.{js,ts,json}": "biome check --write --no-errors-on-unmatched",
     "*.{ts,tsx}": [
       "node scripts/check-no-emoji.mjs",
       "bash scripts/tsc-staged.sh"
     ],
-    "*.{md,mdx}": "cspell lint --no-must-find-files"
+    "*.{md,mdx}": "cspell lint --no-must-find-files",
+    "*.{js,ts,mjs,json}": "biome check --write --no-errors-on-unmatched"
   }
 }

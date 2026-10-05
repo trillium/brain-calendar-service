@@ -53,6 +53,14 @@ const ADAPTED = {
   "cspell.json": "project dictionary extended with calendar/Dolt vocabulary.",
   "scripts/next-migration.sh":
     "C4: migration directory re-pointed from supabase/migrations to migrations/.",
+  "scripts/db-migrate.mjs":
+    "Project script, not a Canon file. Applies this repo's own Dolt migrations to this repo's own store (decision-4wh); records applied migrations in dolt history rather than in a local bookkeeping file.",
+  "scripts/db-verify.mjs":
+    "Project script, not a Canon file. Asserts the live store matches src/adapters/dolt/schema.mjs by table, column and index name, including the load-bearing columns.",
+  "scripts/gen-dolt-types.mjs":
+    "Project script, not a Canon file. Generates row types from the declared schema so the types cannot drift from the claim.",
+  "scripts/start-local-dolt.sh":
+    "Project script, not a Canon file. Starts the DISPOSABLE Dolt server S1 verifies against, so an autonomous worker does not administer the fleet-shared one.",
   ".github/workflows/ci.yml":
     "C2: build job runs type-check instead of next build; accessibility.yml and e2e.yml recorded not-applicable rather than created empty.",
 };
