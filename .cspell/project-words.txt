@@ -7,12 +7,16 @@ BEADS
 behaviour
 biome
 biomejs
+BYDAY
 caldav
 CalDAV
+crlf
 dolt
 Dolt
+DOLT
 DTEND
 dtstamp
+DTSTAMP
 DTSTART
 etag
 Etag
@@ -39,6 +43,7 @@ materialises
 mdx
 mjs
 mulberry
+noerrors
 olympus
 Olympus
 rdate
@@ -48,8 +53,11 @@ recurrence
 repointed
 rrule
 RRULE
+rrules
 Santiago
 Sao
+sync
+SYNC
 sync-token
 synccollection
 tzdata

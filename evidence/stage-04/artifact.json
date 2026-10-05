@@ -1,0 +1,25 @@
+{
+  "stage": "S4",
+  "gate": "G3 - dolt history/diff detects exactly the changed temporal rows and nothing else",
+  "query": "SELECT * FROM DOLT_DIFF(<fromCommit>, 'HEAD', <table>) AS d",
+  "mechanism": "RFC 5546 semantics live in application code, never in Dolt: dolt merge is cell-wise with one strategy and custom merge functions do not exist, so teaching dolt the rules is not available and a cell-wise merge can produce a row no RFC 5546 reading endorses.",
+  "cases": {
+    "changedThenReverted": "zero outbound writes",
+    "nonTemporalColumnOnly": "zero calendar writes",
+    "temporalColumnMoved": "exactly the one changed row id",
+    "cursorHashAbsent": "typed state full_resync_required, never a silent empty diff",
+    "noCursorYet": "typed state full_resync_required"
+  },
+  "replay": {
+    "fixture": "fixtures/replay-a",
+    "rounds": 5,
+    "fixpointRound": 2,
+    "duplicates": 0,
+    "duplicateDetection": ["by UID", "by private bead id", "by normalised payload hash"]
+  },
+  "tests": {
+    "files": ["src/sync/changedetection/changedetection.test.ts"],
+    "total": 46
+  },
+  "knownDeviations": ["two-database detection deferred to S7; see skips.md"]
+}
