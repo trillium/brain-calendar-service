@@ -1,0 +1,21 @@
+{
+  "stage": "S3",
+  "gate": "G2 - DST correctness survives a timezone build step, and the build is idempotent",
+  "finding": "G2 PREMISE FALSIFIED, AND REPLACED. ical.js 2.2.1 as published on npm ships NO VTIMEZONE data and NO generator: ICAL.TimezoneService.get(\"America/New_York\") returns undefined on a fresh install, and ICAL.Timezone.get does not exist in 2.x. So there is nothing to rebuild in the sense the plan assumed; the data must be PRODUCED.",
+  "replacement": "build:timezones generates a deterministic UTC-offset transition table for the 8 supported zones over 2020-2040 from the platform IANA database, frozen into src/domain/recurrence/ical.timezones.generated.js. Recurrence reads the pinned table, never the host tzdata, so a host tzdata update cannot silently change what a calendar shows.",
+  "idempotence": "pnpm run build:timezones --check regenerates and fails on any byte difference; verified byte-identical across repeated runs. This replaces the plan git-diff test, which would depend on a clean git tree.",
+  "fixtures": [
+    "09:00 weekly across both 2026 US DST boundaries: local time held at 09:00, offsets {EST, EDT}, real gaps only 167/168/169 hours",
+    "all-day in America/Santiago, whose transition happens at midnight: 10 consecutive calendar dates, transition day measured at 23 hours",
+    "monthly on the 31st: months without a 31st are skipped, never spilled forward",
+    "RECURRENCE-ID overlay: exactly one patched occurrence, the other nine untouched, following occurrences unmoved, and a cancelled occurrence materialised even when the rule never generated it"
+  ],
+  "tests": {
+    "file": "src/domain/recurrence/recurrence.test.ts",
+    "total": 37
+  },
+  "pinnedZones": 8,
+  "horizon": [2020, 2040],
+  "refusalBehaviour": "an instant outside the pinned horizon, or an unpinned zone, raises a typed error rather than guessing (binding rule 8)",
+  "rruleJsUsed": false
+}

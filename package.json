@@ -18,9 +18,12 @@
     "db:server:stop": "bash scripts/start-local-dolt.sh stop",
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:verify": "node scripts/db-verify.mjs",
-    "gen:dolt-types": "node scripts/gen-dolt-types.mjs"
+    "gen:dolt-types": "node scripts/gen-dolt-types.mjs",
+    "build:timezones": "node scripts/build-timezones.mjs",
+    "build:timezones:check": "node scripts/build-timezones.mjs --check"
   },
   "dependencies": {
+    "ical.js": "^2.2.1",
     "mysql2": "^3.24.5"
   },
   "devDependencies": {
