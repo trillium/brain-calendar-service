@@ -21,7 +21,8 @@
     "gen:dolt-types": "node scripts/gen-dolt-types.mjs",
     "build:timezones": "node scripts/build-timezones.mjs",
     "build:timezones:check": "node scripts/build-timezones.mjs --check",
-    "sync:replay": "tsx scripts/sync-replay.mts"
+    "sync:replay": "tsx scripts/sync-replay.mts",
+    "sync:converge": "tsx scripts/sync-converge.mts"
   },
   "dependencies": {
     "ical.js": "^2.2.1",

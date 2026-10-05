@@ -1,6 +1,7 @@
 # Add one word per line. Lines starting with # are comments.
 # Project-specific words for cspell
 # This file is loaded by cspell.json via the "project-words" dictionary.
+bead
 beads
 Beads
 BEADS
@@ -33,6 +34,7 @@ IANA
 ical
 icaljs
 ics
+interleaving
 jsdom
 lg2t8
 libical
@@ -44,6 +46,7 @@ mdx
 mjs
 mulberry
 noerrors
+ntemporal
 olympus
 Olympus
 rdate
@@ -51,6 +54,7 @@ RDATE
 rdates
 recurrence
 repointed
+resubscribe
 rrule
 RRULE
 rrules
@@ -60,10 +64,13 @@ sync
 SYNC
 sync-token
 synccollection
+syncs
 tzdata
 tzid
 uid
 ujyse
+unowned
+unrepresentable
 VCALENDAR
 vcs
 VEVENT

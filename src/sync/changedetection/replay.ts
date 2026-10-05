@@ -13,7 +13,7 @@
 import { resolve } from "../../domain/rfc5546/resolve.js";
 import type { Occurrence } from "../../domain/rfc5546/types.js";
 
-interface ExternalEvent {
+export interface ExternalEvent {
   uid: string;
   privateBeadId: string | null;
   sequence: number;

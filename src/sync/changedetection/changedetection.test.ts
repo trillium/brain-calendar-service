@@ -15,14 +15,47 @@ import { config } from "../../adapters/dolt/config.mjs";
 import { detectChanges, headCommit } from "./plan.js";
 import { payloadHash, replay } from "./replay.js";
 
+// THIS SUITE OWNS ITS OWN TABLE, CREATED AND DROPPED HERE.
+//
+// It used to share sync_probe_period with the schema suite, which made both of
+// them order-dependent: a full run could lose rows another case had inserted,
+// so the suite passed alone and failed in a full run. Shared mutable state
+// between suites is the defect, not the run order, so each suite now owns its
+// substrate outright.
+const PROBE = "sync_probe_period";
+
 let conn: Connection;
+
+const createProbe = async () => {
+  await conn.query(`CREATE TABLE IF NOT EXISTS ${PROBE} (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    grain VARCHAR(16) NOT NULL,
+    period_start_utc DATETIME NOT NULL,
+    period_end_utc DATETIME NOT NULL,
+    linked_bead_id VARCHAR(64) NULL,
+    attributes_json JSON NOT NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    UNIQUE KEY uq_probe_grain_start (grain, period_start_utc)
+  ) ENGINE=InnoDB`);
+  await conn.query("CALL DOLT_ADD('.')");
+  await conn.query("CALL DOLT_COMMIT('-m', 's4 probe table')");
+};
 
 beforeAll(async () => {
   conn = await createConnection(config);
+  await conn.query(`DROP TABLE IF EXISTS ${PROBE}`);
+  await createProbe();
 });
 
 afterAll(async () => {
-  await conn?.end();
+  try {
+    await conn.query(`DROP TABLE IF EXISTS ${PROBE}`);
+    await conn.query("CALL DOLT_ADD('.')");
+    await conn.query("CALL DOLT_COMMIT('-Am', 's4 probe table dropped')");
+  } finally {
+    await conn?.end();
+  }
 });
 
 const insertPeriod = async (
@@ -33,7 +66,7 @@ const insertPeriod = async (
 ) => {
   const ts = "2026-01-01 00:00:00";
   const [r] = await conn.query(
-    `INSERT INTO calendar_period
+    `INSERT INTO sync_probe_period
        (grain, period_start_utc, period_end_utc, linked_bead_id, attributes_json,
         created_at, updated_at)
      VALUES ('day', ?, ?, ?, ?, ?, ?)`,
@@ -47,15 +80,10 @@ const commit = async (message: string) => {
   await conn.query("CALL DOLT_COMMIT('-m', ?)", [message]);
 };
 
-const clearPeriods = async () => {
-  await conn.query("DELETE FROM calendar_period");
-  await conn.query("CALL DOLT_ADD('.')");
-  await conn.query("CALL DOLT_COMMIT('-Am', 'test reset')");
-};
-
 describe("change detection over dolt history and diff", () => {
+  afterAll(async () => {});
+
   it("reports zero calendar writes when a row is changed and changed back in one window", async () => {
-    await clearPeriods();
     const id = await insertPeriod(
       "2026-05-01 00:00:00",
       "2026-05-02 00:00:00",
@@ -66,23 +94,22 @@ describe("change detection over dolt history and diff", () => {
     const cursor = await headCommit(conn);
 
     // Change it, then change it straight back inside the same sync window.
-    await conn.query("UPDATE calendar_period SET period_start_utc = ? WHERE id = ?", [
+    await conn.query("UPDATE sync_probe_period SET period_start_utc = ? WHERE id = ?", [
       "2026-05-03 00:00:00",
       id,
     ]);
-    await conn.query("UPDATE calendar_period SET period_start_utc = ? WHERE id = ?", [
+    await conn.query("UPDATE sync_probe_period SET period_start_utc = ? WHERE id = ?", [
       "2026-05-01 00:00:00",
       id,
     ]);
     await commit("change and revert");
 
-    const result = await detectChanges(conn, "calendar_period", cursor);
+    const result = await detectChanges(conn, PROBE, cursor);
     expect(result.state).toBe("ok");
     expect(result.state === "ok" && result.changedIds).toEqual([]);
   });
 
   it("reports zero calendar writes when only a non-temporal column changes", async () => {
-    await clearPeriods();
     const id = await insertPeriod(
       "2026-06-01 00:00:00",
       "2026-06-02 00:00:00",
@@ -92,22 +119,21 @@ describe("change detection over dolt history and diff", () => {
     await commit("insert period 2");
     const cursor = await headCommit(conn);
 
-    await conn.query("UPDATE calendar_period SET attributes_json = ? WHERE id = ?", [
+    await conn.query("UPDATE sync_probe_period SET attributes_json = ? WHERE id = ?", [
       JSON.stringify({ label: "renamed" }),
       id,
     ]);
-    await conn.query("UPDATE calendar_period SET linked_bead_id = ? WHERE id = ?", [
+    await conn.query("UPDATE sync_probe_period SET linked_bead_id = ? WHERE id = ?", [
       "brain-other",
       id,
     ]);
     await commit("non-temporal change only");
 
-    const result = await detectChanges(conn, "calendar_period", cursor);
+    const result = await detectChanges(conn, PROBE, cursor);
     expect(result.state === "ok" && result.changedIds).toEqual([]);
   });
 
   it("reports the changed row when a temporal column really moves", async () => {
-    await clearPeriods();
     const id = await insertPeriod(
       "2026-07-01 00:00:00",
       "2026-07-02 00:00:00",
@@ -116,18 +142,17 @@ describe("change detection over dolt history and diff", () => {
     );
     await commit("insert period 3");
     const cursor = await headCommit(conn);
-    await conn.query("UPDATE calendar_period SET period_start_utc = ? WHERE id = ?", [
+    await conn.query("UPDATE sync_probe_period SET period_start_utc = ? WHERE id = ?", [
       "2026-07-03 00:00:00",
       id,
     ]);
     await commit("temporal change");
-    const result = await detectChanges(conn, "calendar_period", cursor);
+    const result = await detectChanges(conn, PROBE, cursor);
     expect(result.state === "ok" && result.changedIds).toEqual([id]);
   });
 
   it("forces a full resync, loudly, when the cursor hash is absent", async () => {
-    await clearPeriods();
-    const result = await detectChanges(conn, "calendar_period", "0".repeat(40));
+    const result = await detectChanges(conn, PROBE, "0".repeat(40));
     expect(result.state).toBe("full_resync_required");
     expect(result.state === "full_resync_required" && result.reason).toMatch(
       /absent from dolt_log/,
@@ -135,7 +160,7 @@ describe("change detection over dolt history and diff", () => {
   });
 
   it("forces a full resync when there is no cursor at all", async () => {
-    const result = await detectChanges(conn, "calendar_period", null);
+    const result = await detectChanges(conn, PROBE, null);
     expect(result.state).toBe("full_resync_required");
   });
 });
