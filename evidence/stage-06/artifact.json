@@ -1,0 +1,43 @@
+{
+  "stage": "S6",
+  "gate": "G5 - one provider transport is viable at realistic scale, including token-invalidation recovery",
+  "transport": {
+    "builtOn": "fetch against a local fixture CalDAV server",
+    "notUsed": "ts-caldav - see skips.md for why",
+    "networkInCI": false
+  },
+  "rfc6578": {
+    "initialSync": "empty DAV:sync-token element",
+    "incremental": "stored token",
+    "invalidTokenFallback": "403 precondition body, then re-run with an empty token"
+  },
+  "googleLimits": {
+    "propertyKeyMax": 44,
+    "propertyValueMax": 1024,
+    "propertiesPerEvent": 300,
+    "bytesPerEvent": 32768,
+    "enforcedBefore": "send",
+    "note": "a dropped marker key means duplicate events, so this is checked, not assumed"
+  },
+  "twoValuedDelete": {
+    "cancelledExceptionOfLiveSeries": "cancel_instance",
+    "cancelledParent": "delete_event",
+    "cancelledExceptionOfCancelledSeries": "delete_event",
+    "uncancelled": "null"
+  },
+  "measure": {
+    "scenario": "realistic",
+    "rounds": 5,
+    "requestsPerSync": 43,
+    "budget": 250,
+    "budgetRule": "measured + 2x headroom (decision-kax)",
+    "dominatedBy": "REPORT, 100% of bytes and 98.9% of client-observed time",
+    "gateFailsOn": "the number being over budget OR the explanation being missing"
+  },
+  "harnessProven": true,
+  "tests": {
+    "files": ["src/adapters/caldav/caldav.test.ts"],
+    "total": 79,
+    "orderIndependent": true
+  }
+}

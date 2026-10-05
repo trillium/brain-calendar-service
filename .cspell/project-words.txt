@@ -10,8 +10,10 @@ biome
 biomejs
 BYDAY
 caldav
+CalDav
 CalDAV
 crlf
+DAV
 dolt
 Dolt
 DOLT
@@ -26,9 +28,11 @@ EXDATE
 fallow
 fallowrc
 freebusy
+getetag
 gitleaks
 hastebin
 ho6
+href
 husky
 IANA
 ical
@@ -45,10 +49,12 @@ materialises
 mdx
 mjs
 mulberry
+multistatus
 noerrors
 ntemporal
 olympus
 Olympus
+precondition
 rdate
 RDATE
 rdates
@@ -71,9 +77,11 @@ uid
 ujyse
 unowned
 unrepresentable
+uriprefix
 VCALENDAR
 vcs
 VEVENT
 VEVENTs
 VTIMEZONE
 vtimezoneShanghai
+xml
