@@ -1,0 +1,31 @@
+{
+  "stage": "S1",
+  "generatedBy": "scripts/db-verify.mjs",
+  "executedAgainst": "disposable local Dolt 127.0.0.1:3399 (NOT the fleet-shared server; see skips.md)",
+  "store": "brain_calendar_service (this project only; the bd-owned schema is untouched, decision-4wh)",
+  "tables": [
+    "calendar_calendar",
+    "calendar_binding",
+    "calendar_exception",
+    "calendar_sync_cursor",
+    "calendar_conflict",
+    "calendar_period"
+  ],
+  "columnsVerified": 51,
+  "indexesVerified": 15,
+  "roundTrips": {
+    "calendar_calendar": "insert/read/update/delete + duplicate provider+remote id refused",
+    "calendar_binding": "insert/read/update/delete + a binding with NULL ownership_token (an event the service did not create)",
+    "calendar_exception": "insert + duplicate recurrence occurrence refused",
+    "calendar_sync_cursor": "two cursors for ONE calendar across two source databases, and a NULL commit hash (full-resync request, not a silent empty diff)",
+    "calendar_conflict": "quarantined row defaults to resolved=0 and decision_id=NULL",
+    "calendar_period": "day, week and month as three distinct records + duplicate grain/start refused"
+  },
+  "tests": {
+    "file": "src/adapters/dolt/schema.test.ts",
+    "total": 10
+  },
+  "harnessProven": "db:migrate, db:verify and the schema suite have each been executed end-to-end against a real Dolt server, with this artifact checked in (R6).",
+  "generatedTypes": "src/types/dolt.generated.ts",
+  "knownDeviations": ["foreign keys asserted as indexes; see skips.md"]
+}

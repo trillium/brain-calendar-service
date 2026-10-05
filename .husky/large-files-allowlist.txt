@@ -4,3 +4,4 @@
 # src/generated/*
 # prisma/schema.prisma
 # src/data/*.csv
+scripts/canon-audit.mjs

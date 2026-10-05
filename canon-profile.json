@@ -7,15 +7,15 @@
     "templateRoot": "~/code/canon/template"
   },
   "project": {
-    "name": "calendar-service",
+    "name": "brain-calendar-service",
     "beadProject": "project-g8dq",
     "plan": "brain-lg2t8",
     "shape": "headless TypeScript sync daemon + MCP stdio server; no UI, no web framework, no Postgres",
     "canonAdaptation": "Canon's canonical biome.json does not parse under any currently installable Biome (verified against 1.9.4, 2.4.16 and 2.5.15) even though Canon's own package.json declares @biomejs/biome ^2.4.0. S0 therefore carries the minimum mechanical renames needed to parse, each declared with its reason in scripts/canon-audit.mjs, and files the upstream defect as a canon-extension item rather than working around it silently.",
     "repository": {
-      "path": "~/dev/calendar-service",
+      "path": "~/dev/brain-calendar-service",
       "remote": "none by standing decision",
-      "note": "New repositories start local and publishing is held: no origin is configured and none may be invented without the captain asking. Name chosen as 'calendar-service' (firstmate's suggestion, task-uzrc2 inbox 001); the plan names no repository.",
+      "note": "New repositories start local and publishing is held: no origin is configured and none may be invented without the captain asking. Name is 'brain-calendar-service' per the captain's correction (task-uzrc2 inbox 002), superseding the earlier 'calendar-service' suggestion in inbox 001. The plan names no repository.",
       "locationHazard": "Deliberately NOT under ~/code. ~/code is the root of a pnpm workspace (pnpm-workspace.yaml, root package.json 'remotion-videos', 45 remotion-* members), so a standalone repo placed there has its pnpm install silently resolve against that workspace instead of itself. Verified: pnpm reported 'Scope: all 45 workspace projects' and installed no node_modules in the repo. An .npmrc with ignore-workspace=true did NOT override it."
     }
   },
@@ -68,7 +68,7 @@
     {
       "module": "database",
       "status": "not applicable",
-      "reason": "Conflict C1. Canon mandates Supabase Postgres server-side; the approved architecture makes Dolt/Beads authoritative and explicitly rejected a second source of truth. Replaced by Dolt schema migrations plus a generated Dolt row-type file (pnpm run gen:dolt-types)."
+      "reason": "Conflict C1. Canon mandates Supabase Postgres server-side; the approved architecture makes Dolt/Beads authoritative and explicitly rejected a second source of truth. Replaced by Dolt schema migrations plus a generated Dolt row-type file (pnpm run gen:dolt-types). At S1 the migration allocator was re-pointed, the schema declared in src/adapters/dolt/schema.mjs, and db:verify + a 10-test round-trip suite run against a real (disposable) Dolt server."
     },
     {
       "module": "styling",
@@ -186,5 +186,8 @@
     "Any write to a calendar outside the SyncPolicy allowlist.",
     "A schema migration against the fleet-shared Dolt server.",
     "Resolution of a specific quarantined conflict."
-  ]
+  ],
+  "largeFileAllowlist": {
+    "scripts/canon-audit.mjs": "S0's conformance gate plus AGENTS.md's generator. Splitting them would put the thing that checks conformance in two files, which is worse than one file 35 lines over a soft cap. Revisit at S9 when the guard becomes a merge condition: split then, or raise the cap knowingly."
+  }
 }
