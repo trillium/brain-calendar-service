@@ -1,0 +1,7 @@
+# S2 skip ledger (R13)
+
+skip: fast-check was NOT installed. The plan classifies property-based testing as a canon-extension request rather than a private dependency decision, and that request has not been filed or approved. The properties are exercised instead over a seeded, deterministic sweep of 2000 pairs (properties/pairs.ts, seed 20260301), which covers the same key space with a fixed seed, so any failure reproduces from the log alone with no extra dependency. Revisit if the canon-extension request is approved.
+skip: No persistence and no transport. Deliberately: S2's own clause says if this stage needs a database it is written wrong. Nothing here reads a clock, a socket, or a row.
+skip: The optional `base` (common-ancestor) argument is accepted and threaded but does not change any outcome. RFC 5546 resolves by last-writer-wins; it does not merge fields, and merging would reintroduce the field-level authority question the approved architecture rejected. Recorded rather than silently ignored.
+skip: No incident/reference to an incident was needed to justify the ordering, because the ordering comes from RFC 5545 section 3.8.7.4 and RFC 5546 section 2.1.5 directly. The plan asks every rule to be proven against a real past mistake; here the past mistake is one the project has not made yet, and the rule is quoted from the specification rather than from experience.
+skip: Temporal primitives (calendar_period) were not touched, and no Dolt code was written at this stage.

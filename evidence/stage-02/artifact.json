@@ -1,0 +1,96 @@
+{
+  "stage": "S2",
+  "generatedBy": "src/domain/rfc5546/emit-artifact.test.ts",
+  "gate": "G1 - resolution is total and stable",
+  "keysInOrder": ["UID + RECURRENCE-ID", "SEQUENCE", "DTSTAMP", "canonical tie-break"],
+  "organizer": "beads/dolt (assigns SEQUENCE); external calendars are clients",
+  "decisionTable": [
+    {
+      "name": "different UIDs are not a conflict at all",
+      "keys": "UID",
+      "reason": "different_object",
+      "winner": "none (both retained)",
+      "conflicted": false
+    },
+    {
+      "name": "two different occurrences of one series are not a conflict",
+      "keys": "UID + RECURRENCE-ID",
+      "reason": "different_occurrence",
+      "winner": "none (both retained)",
+      "conflicted": false
+    },
+    {
+      "name": "an instance overlays its parent for one occurrence",
+      "keys": "UID + RECURRENCE-ID presence",
+      "reason": "instance_overrides_parent",
+      "winner": "remote",
+      "conflicted": false
+    },
+    {
+      "name": "equal sequence, later DTSTAMP wins",
+      "keys": "SEQUENCE tie -> DTSTAMP",
+      "reason": "later_dtstamp",
+      "winner": "remote",
+      "conflicted": true
+    },
+    {
+      "name": "higher remote sequence beats lower local DTSTAMP",
+      "keys": "SEQUENCE",
+      "reason": "higher_sequence",
+      "winner": "remote",
+      "conflicted": true
+    },
+    {
+      "name": "higher local sequence beats lower remote DTSTAMP",
+      "keys": "SEQUENCE",
+      "reason": "higher_sequence",
+      "winner": "local",
+      "conflicted": true
+    },
+    {
+      "name": "a missing DTSTAMP sorts below a real one rather than throwing",
+      "keys": "SEQUENCE tie -> DTSTAMP absent",
+      "reason": "later_dtstamp",
+      "winner": "remote",
+      "conflicted": true
+    },
+    {
+      "name": "both DTSTAMPs missing falls through to a deterministic tie-break",
+      "keys": "SEQUENCE tie -> DTSTAMP tie",
+      "reason": "tie_broken_canonically",
+      "winner": "remote",
+      "conflicted": true
+    },
+    {
+      "name": "identical payloads resolve without flapping",
+      "keys": "SEQUENCE tie -> DTSTAMP tie -> canonical identity",
+      "reason": "identical",
+      "winner": "local",
+      "conflicted": true
+    },
+    {
+      "name": "a far-future sequence still wins: sequence outranks DTSTAMP",
+      "keys": "SEQUENCE",
+      "reason": "higher_sequence",
+      "winner": "local",
+      "conflicted": true
+    }
+  ],
+  "sweep": {
+    "pairs": 2000,
+    "conflicted": 223,
+    "bothRetained": 1464,
+    "unknown": 0,
+    "reasonDistribution": {
+      "different_object": 1328,
+      "tie_broken_canonically": 14,
+      "different_occurrence": 136,
+      "higher_sequence": 170,
+      "instance_overrides_parent": 313,
+      "later_dtstamp": 38,
+      "identical": 1
+    }
+  },
+  "propertiesProven": ["idempotence", "commutativity", "stability"],
+  "total": true
+}
