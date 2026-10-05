@@ -38,11 +38,6 @@
       "reason": "C2: no Next.js. jsx/plugins/next paths removed; lib is ES2022, not dom."
     },
     {
-      "file": ".fallowrc.json",
-      "exists": true,
-      "reason": "R1 rule 6: adapter-duplication exemption is an ignore entry carrying a reason, not a convention. ignoreDependencies reduced to what this repo actually installs."
-    },
-    {
       "file": "vitest.config.ts",
       "exists": true,
       "reason": "C5: Node environment instead of jsdom; the risky logic here is temporal and server-side. Canon's jsdom config is added as a second project when a UI exists."
@@ -61,6 +56,11 @@
       "file": ".husky/large-files-allowlist.txt",
       "exists": true,
       "reason": "One entry added: scripts/canon-audit.mjs. The S0 conformance gate and AGENTS.md's generator are one file on purpose - splitting the thing that checks conformance is worse than one file 35 lines over a soft cap - with the reason and a revisit point recorded in canon-profile.json. Revisit at S9, when the 250-line guard becomes a merge condition."
+    },
+    {
+      "file": ".fallowrc.json",
+      "exists": true,
+      "reason": "R1 rule 6 + S2: Canon's ignorePatterns exclude **/*.test.* from the graph entirely, which makes any module imported ONLY by a test look unreachable - and this repo's domain modules are imported only by their tests, by design, because domain/ has no I/O and therefore no runtime entry point. Test files are therefore IN the graph here, so test-only modules are reachable. Duplication threshold, complexity caps and the circular/boundary error rules are Canon's, unchanged."
     },
     {
       "file": "scripts/db-migrate.mjs",

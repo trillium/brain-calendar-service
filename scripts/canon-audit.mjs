@@ -45,8 +45,6 @@ const ADAPTED = {
   "scripts/check-no-emoji.mjs":
     "Biome's noMisleadingCharacterClass rejects the canonical file: it puts U+FE0F and U+200D in the same character class as the emoji ranges, but those are combining/format characters and the pair forms one grapheme. Split into EMOJI_RE + COMBINING_RE with an identical detected code-point set. Also retargeted two messages that recommend lucide-react icons, which do not apply to a service with no UI.",
   "tsconfig.json": "C2: no Next.js. jsx/plugins/next paths removed; lib is ES2022, not dom.",
-  ".fallowrc.json":
-    "R1 rule 6: adapter-duplication exemption is an ignore entry carrying a reason, not a convention. ignoreDependencies reduced to what this repo actually installs.",
   "vitest.config.ts":
     "C5: Node environment instead of jsdom; the risky logic here is temporal and server-side. Canon's jsdom config is added as a second project when a UI exists.",
   "cspell.json": "project dictionary extended with calendar/Dolt vocabulary.",
@@ -54,6 +52,8 @@ const ADAPTED = {
     "C4: migration directory re-pointed from supabase/migrations to migrations/.",
   ".husky/large-files-allowlist.txt":
     "One entry added: scripts/canon-audit.mjs. The S0 conformance gate and AGENTS.md's generator are one file on purpose - splitting the thing that checks conformance is worse than one file 35 lines over a soft cap - with the reason and a revisit point recorded in canon-profile.json. Revisit at S9, when the 250-line guard becomes a merge condition.",
+  ".fallowrc.json":
+    "R1 rule 6 + S2: Canon's ignorePatterns exclude **/*.test.* from the graph entirely, which makes any module imported ONLY by a test look unreachable - and this repo's domain modules are imported only by their tests, by design, because domain/ has no I/O and therefore no runtime entry point. Test files are therefore IN the graph here, so test-only modules are reachable. Duplication threshold, complexity caps and the circular/boundary error rules are Canon's, unchanged.",
   "scripts/db-migrate.mjs":
     "Project script, not a Canon file. Applies this repo's own Dolt migrations to this repo's own store (decision-4wh); records applied migrations in dolt history rather than in a local bookkeeping file.",
   "scripts/db-verify.mjs":

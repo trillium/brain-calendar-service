@@ -1,8 +1,6 @@
 {
   "$schema": "https://fallow.tools/schemas/fallowrc.json",
   "ignorePatterns": [
-    "**/*.test.*",
-    "**/*.spec.*",
     "**/*.stories.*",
     "**/*.generated.*",
     "**/node_modules/**",
@@ -30,5 +28,5 @@
     "cyclomatic": 10,
     "cognitive": 15
   },
-  "entry": ["scripts/*.mjs", "scripts/*.sh", "migrations/**"]
+  "entry": ["migrations/**", "scripts/*.mjs", "scripts/*.sh"]
 }
