@@ -1,0 +1,36 @@
+{
+  "stage": "S5",
+  "gate": "G4 - the sync loop converges; a second round writes nothing",
+  "converge": {
+    "scenario": "loop",
+    "rounds": 5,
+    "fixpointRound": 2,
+    "duplicates": 0,
+    "selfEchoDropped": "2 per idle round"
+  },
+  "denyPath": {
+    "policy": "SyncPolicy carries the permitted (calendarId, operation) set; the write path refuses anything not in it",
+    "delete": "a DELETE requires an ownership token minted at create time; with no token the delete cannot be expressed",
+    "rung": 1,
+    "tests": [
+      "out-of-policy write refused",
+      "delete without a token refused",
+      "delete with a mismatched token refused",
+      "delete with the matching token permitted"
+    ]
+  },
+  "journal": {
+    "keyedBy": "idempotency key",
+    "crashReplay": "entries already applied are skipped on restart"
+  },
+  "retryPolicy": {
+    "backoffMs": [250, 500, 1000, 2000],
+    "neverRetries": "any non-idempotent write"
+  },
+  "tests": {
+    "files": ["src/sync/loop/loop.test.ts"],
+    "total": 61,
+    "orderIndependent": true
+  },
+  "isolationFix": "change detection now owns its own substrate table, created and dropped by the suite; it previously shared calendar_period with the schema suite, which made both order-dependent"
+}
