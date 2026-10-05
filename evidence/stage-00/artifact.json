@@ -1,0 +1,123 @@
+{
+  "stage": "S0",
+  "generatedBy": "scripts/canon-audit.mjs",
+  "canonCommit": "f714673",
+  "moduleStatuses": {
+    "linting": "conformant",
+    "hooks": "partial",
+    "spellcheck": "conformant",
+    "codebase-health": "conformant",
+    "testing": "partial",
+    "ci": "partial",
+    "migration-allocator": "partial",
+    "auth": "not applicable",
+    "database": "not applicable",
+    "styling": "not applicable",
+    "theming": "not applicable",
+    "feedtack": "not applicable",
+    "email": "not applicable",
+    "analytics": "not applicable",
+    "errors": "partial",
+    "utilities": "conformant"
+  },
+  "verbatimDrift": [],
+  "adaptations": [
+    {
+      "file": "biome.json",
+      "exists": true,
+      "reason": "R1 rule 1: noExplicitAny warn -> error. Plus the minimum mechanical changes needed for the copy to parse under @biomejs/biome 2.4.16, which is the 2.x line Canon's own package.json declares: organizeImports -> assist.actions.source.organizeImports, files.ignore -> negated files.includes, a11y.useAriaProps -> a11y.useAriaPropsForRole, a11y.noBlankTarget -> security.noBlankTarget, suspicious.noRestrictedGlobals -> style.noRestrictedGlobals with an object-valued deniedGlobals map. See brain finding: Canon's canonical biome.json does not parse under ANY currently installable Biome, so this adaptation is mandatory, not stylistic."
+    },
+    {
+      "file": "scripts/check-no-emoji.mjs",
+      "exists": true,
+      "reason": "Biome's noMisleadingCharacterClass rejects the canonical file: it puts U+FE0F and U+200D in the same character class as the emoji ranges, but those are combining/format characters and the pair forms one grapheme. Split into EMOJI_RE + COMBINING_RE with an identical detected code-point set. Also retargeted two messages that recommend lucide-react icons, which do not apply to a service with no UI."
+    },
+    {
+      "file": "tsconfig.json",
+      "exists": true,
+      "reason": "C2: no Next.js. jsx/plugins/next paths removed; lib is ES2022, not dom."
+    },
+    {
+      "file": ".fallowrc.json",
+      "exists": true,
+      "reason": "R1 rule 6: adapter-duplication exemption is an ignore entry carrying a reason, not a convention. ignoreDependencies reduced to what this repo actually installs."
+    },
+    {
+      "file": "vitest.config.ts",
+      "exists": true,
+      "reason": "C5: Node environment instead of jsdom; the risky logic here is temporal and server-side. Canon's jsdom config is added as a second project when a UI exists."
+    },
+    {
+      "file": "cspell.json",
+      "exists": true,
+      "reason": "project dictionary extended with calendar/Dolt vocabulary."
+    },
+    {
+      "file": "scripts/next-migration.sh",
+      "exists": true,
+      "reason": "C4: migration directory re-pointed from supabase/migrations to migrations/."
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "exists": true,
+      "reason": "C2: build job runs type-check instead of next build; accessibility.yml and e2e.yml recorded not-applicable rather than created empty."
+    }
+  ],
+  "bindingRules": [
+    {
+      "id": 1,
+      "rung": 2
+    },
+    {
+      "id": 2,
+      "rung": 2
+    },
+    {
+      "id": 3,
+      "rung": 2
+    },
+    {
+      "id": 4,
+      "rung": 2
+    },
+    {
+      "id": 5,
+      "rung": 2
+    },
+    {
+      "id": 6,
+      "rung": 2
+    },
+    {
+      "id": 7,
+      "rung": 2
+    },
+    {
+      "id": 8,
+      "rung": 2
+    },
+    {
+      "id": 9,
+      "rung": 2
+    },
+    {
+      "id": 10,
+      "rung": 1
+    },
+    {
+      "id": "HUMAN-ONLY",
+      "rung": 4
+    }
+  ],
+  "biomeNoExplicitAny": "error",
+  "fallowSuppressions": [
+    {
+      "suppression": "duplicates.ignore",
+      "value": "src/adapters/**",
+      "justified": true
+    }
+  ],
+  "canonAdaptation": "Canon's canonical biome.json does not parse under any currently installable Biome (verified against 1.9.4, 2.4.16 and 2.5.15) even though Canon's own package.json declares @biomejs/biome ^2.4.0. S0 therefore carries the minimum mechanical renames needed to parse, each declared with its reason in scripts/canon-audit.mjs, and files the upstream defect as a canon-extension item rather than working around it silently.",
+  "failures": [],
+  "passed": true
+}

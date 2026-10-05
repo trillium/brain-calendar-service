@@ -1,0 +1,72 @@
+{
+  "$comment": "Stage -> exit-command map (plan R2 section 3, R3). Every entry condition is a command or a checked artifact, never a sentence, and every exit is a command that exits 0 or non-zero.",
+  "source": "brain-lg2t8 section 7 (post-amendment)",
+  "stages": [
+    {
+      "id": "S0",
+      "name": "Canon profile, repo skeleton, conformance baseline",
+      "entry": "canon-profile.json exists with every Canon module classified and reasoned",
+      "exitTest": "pnpm install --frozen-lockfile && pnpm run type-check && pnpm run lint && pnpm run test -- --run && pnpm run health && pnpm run canon:audit"
+    },
+    {
+      "id": "S1",
+      "name": "Dolt data model and schema migrations",
+      "entry": "pnpm run test -- evidence/stage-00 --run",
+      "exitTest": "pnpm run db:migrate && pnpm run db:verify && pnpm run test -- src/adapters/dolt/schema.test.ts --run"
+    },
+    {
+      "id": "S2",
+      "name": "RFC 5546 conflict and sequence semantics as pure functions",
+      "entry": "pnpm run test -- evidence/stage-01 --run",
+      "exitTest": "pnpm run test -- src/domain/rfc5546 --run && pnpm run test -- src/domain/rfc5546/properties --run"
+    },
+    {
+      "id": "S3",
+      "name": "Recurrence with exceptions, and the timezone build step",
+      "entry": "pnpm run test -- evidence/stage-02 --run",
+      "exitTest": "pnpm run build:timezones && pnpm run test -- src/domain/recurrence --run"
+    },
+    {
+      "id": "S4",
+      "name": "Bidirectional change detection over Dolt history and diff",
+      "entry": "pnpm run test -- evidence/stage-03 --run",
+      "exitTest": "pnpm run test -- src/sync/changedetection --run && pnpm run sync:replay fixtures/replay-a --rounds 5"
+    },
+    {
+      "id": "S5",
+      "name": "Loop and duplicate prevention, proven by convergence",
+      "entry": "pnpm run test -- evidence/stage-04 --run",
+      "exitTest": "pnpm run sync:converge --scenario loop --rounds 5"
+    },
+    {
+      "id": "S6",
+      "name": "External provider adapters, starting with Google over CalDAV",
+      "entry": "pnpm run test -- evidence/stage-05 --run",
+      "exitTest": "pnpm run test -- src/adapters/caldav --run && pnpm run sync:measure --scenario realistic --assert-under <budget>"
+    },
+    {
+      "id": "S7",
+      "name": "Sync orchestration and quarantine",
+      "entry": "pnpm run test -- evidence/stage-06 --run",
+      "exitTest": "pnpm run sync:once --calendar <id> --dry-run --json | tee /tmp/plan.json && pnpm run sync:verify-plan /tmp/plan.json"
+    },
+    {
+      "id": "S8",
+      "name": "The TypeScript MCP interface",
+      "entry": "pnpm run test -- evidence/stage-07 --run",
+      "exitTest": "pnpm run test -- src/mcp --run && pnpm run mcp:smoke"
+    },
+    {
+      "id": "S9",
+      "name": "Repository-health convergence and unattended-work readiness",
+      "entry": "pnpm run test -- evidence/stage-08 --run",
+      "exitTest": "pnpm run size:check && pnpm run health && pnpm run type-check && pnpm run lint && pnpm run test -- --run"
+    },
+    {
+      "id": "S10",
+      "name": "Migration and rollout",
+      "entry": "pnpm run test -- evidence/stage-09 --run && pnpm run sync:soak-report --since <N>d",
+      "exitTest": "pnpm run rollout:dry-run --scenario backfill && pnpm run rollout:rollback-drill && pnpm run test -- src/sync/rollout --run"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+node_modules/
+dist/
+coverage/
+.canon/
+*.log
+# dependencies
+node_modules
+.pnpm-store
+
+# next.js
+.next
+out
+
+# build
+dist
+build
+
+# env
+.env*.local
+
+# vercel
+.vercel
+
+# testing
+coverage
+playwright-report
+test-results
+
+# misc
+.DS_Store
+*.tsbuildinfo
+next-env.d.ts
+
+# supabase
+supabase/.temp
+
+# sentry
+.sentryclirc

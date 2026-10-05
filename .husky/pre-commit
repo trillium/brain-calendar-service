@@ -1,0 +1,88 @@
+#!/usr/bin/env sh
+
+pnpm exec lint-staged
+
+# --- Lock file guard ---
+# Rejects lock files from the wrong package manager. Canon uses pnpm.
+WRONG_LOCKS="package-lock.json yarn.lock bun.lockb"
+STAGED=$(git diff --cached --name-only)
+for lockfile in $WRONG_LOCKS; do
+  if echo "$STAGED" | grep -qx "$lockfile"; then
+    echo "error: $lockfile was staged but this project uses pnpm."
+    echo "  Run: git rm --cached $lockfile"
+    echo "  (You may also want to add it to .gitignore)"
+    exit 1
+  fi
+done
+
+# --- Next.js 16 convention guard ---
+# Next.js 16 deprecated middleware.ts in favor of proxy.ts.
+# Only runs if the project uses Next.js 16+.
+if [ -f "package.json" ]; then
+  NEXT_VERSION=$(node -e "try{const p=require('./package.json');const v=(p.dependencies||{}).next||(p.devDependencies||{}).next||'';const m=v.match(/(\d+)/);if(m)process.stdout.write(m[1])}catch(e){}" 2>/dev/null)
+  if [ -n "$NEXT_VERSION" ] && [ "$NEXT_VERSION" -ge 16 ] 2>/dev/null; then
+    STAGED_FILES=$(git diff --cached --name-only)
+    DELETED_FILES=$(git diff --cached --name-only --diff-filter=D)
+
+    # Block staging middleware.ts
+    if echo "$STAGED_FILES" | grep -qE '(^|/)middleware\.(ts|js)$'; then
+      echo "error: middleware.ts is deprecated in Next.js 16+. Use proxy.ts instead."
+      echo "  See: https://nextjs.org/docs/app/api-reference/file-conventions/proxy"
+      exit 1
+    fi
+
+    # Block deleting proxy.ts
+    if echo "$DELETED_FILES" | grep -qE '(^|/)proxy\.(ts|js)$'; then
+      echo "error: proxy.ts is required for Next.js 16+ (replaces middleware.ts)."
+      echo "  Do not delete this file."
+      exit 1
+    fi
+  fi
+fi
+
+# --- Large file guard (warning only) ---
+# Flags staged files over 250 lines to encourage decomposition.
+# Allowlist: .husky/large-files-allowlist.txt (one glob per line)
+LARGE_FILE_LIMIT=250
+ALLOWLIST=".husky/large-files-allowlist.txt"
+
+for file in $(git diff --cached --name-only --diff-filter=ACM); do
+  # Skip auto-exempt patterns: tests, deprecated, docs, config formats
+  case "$file" in
+    *.test.*|*.spec.*|*.stories.*) continue ;;
+    *deprecated*|*DEPRECATED*) continue ;;
+    *.md|*.mdx|*.toml|*.json|*.yaml|*.yml) continue ;;
+  esac
+
+  # Skip files in allowlist
+  if [ -f "$ALLOWLIST" ]; then
+    skip=false
+    while IFS= read -r pattern; do
+      case "$pattern" in \#*|"") continue ;; esac
+      case "$file" in $pattern) skip=true; break ;; esac
+    done < "$ALLOWLIST"
+    [ "$skip" = true ] && continue
+  fi
+
+  # Count lines (only for text files that exist)
+  [ -f "$file" ] || continue
+  lines=$(wc -l < "$file" | tr -d ' ')
+  if [ "$lines" -gt "$LARGE_FILE_LIMIT" ]; then
+    echo "warning: $file has $lines lines (limit: $LARGE_FILE_LIMIT). Consider decomposing."
+  fi
+done
+
+# --- Secret scanning (gitleaks) ---
+# Scans staged changes for secrets. Graceful degradation if not installed.
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --verbose
+  if [ $? -ne 0 ]; then
+    echo ""
+    echo "error: gitleaks detected secrets in staged changes."
+    echo "  Remove the secrets before committing."
+    echo "  Bypass (rare): git commit --no-verify"
+    exit 1
+  fi
+else
+  echo "warning: gitleaks not installed. Skipping secret scan. (brew install gitleaks)"
+fi

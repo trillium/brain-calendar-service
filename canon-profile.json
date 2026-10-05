@@ -1,0 +1,190 @@
+{
+  "$comment": "S0 entry artifact (plan R3, decision-wjc). Every Canon module is classified with a stated reason; canon:audit fails if a module is unclassified or reasonless. This file is the gate an unattended run can observe, replacing a captain approval turn.",
+  "canon": {
+    "repository": "trillium/canon",
+    "canonicalRoot": "~/code/canon",
+    "pinnedCommit": "f714673",
+    "templateRoot": "~/code/canon/template"
+  },
+  "project": {
+    "name": "calendar-service",
+    "beadProject": "project-g8dq",
+    "plan": "brain-lg2t8",
+    "shape": "headless TypeScript sync daemon + MCP stdio server; no UI, no web framework, no Postgres",
+    "canonAdaptation": "Canon's canonical biome.json does not parse under any currently installable Biome (verified against 1.9.4, 2.4.16 and 2.5.15) even though Canon's own package.json declares @biomejs/biome ^2.4.0. S0 therefore carries the minimum mechanical renames needed to parse, each declared with its reason in scripts/canon-audit.mjs, and files the upstream defect as a canon-extension item rather than working around it silently.",
+    "repository": {
+      "path": "~/dev/calendar-service",
+      "remote": "none by standing decision",
+      "note": "New repositories start local and publishing is held: no origin is configured and none may be invented without the captain asking. Name chosen as 'calendar-service' (firstmate's suggestion, task-uzrc2 inbox 001); the plan names no repository.",
+      "locationHazard": "Deliberately NOT under ~/code. ~/code is the root of a pnpm workspace (pnpm-workspace.yaml, root package.json 'remotion-videos', 45 remotion-* members), so a standalone repo placed there has its pnpm install silently resolve against that workspace instead of itself. Verified: pnpm reported 'Scope: all 45 workspace projects' and installed no node_modules in the repo. An .npmrc with ignore-workspace=true did NOT override it."
+    }
+  },
+  "modules": [
+    {
+      "module": "linting",
+      "status": "conformant",
+      "reason": "Applies verbatim. biome.json copied byte-identical from modules/linting/biome.json with one declared escalation: noExplicitAny warn -> error, because the plan's own rule 1 made 'no any' load-bearing and Canon ships it too weak to stop it."
+    },
+    {
+      "module": "hooks",
+      "status": "partial",
+      "reason": "Copied verbatim, minus the Next.js-16 middleware.ts/proxy.ts guard, which is guarded by a version check that no-ops here. Emoji guard, gitleaks, and the pnpm lock-file guard all retained."
+    },
+    {
+      "module": "spellcheck",
+      "status": "conformant",
+      "reason": "cspell over *.{md,mdx,ts,tsx}; project dictionary carries ical, icaljs, caldav, rrule, recurrence, dtstamp, uid, rdates, exdate, dolt, beads, tzid, vtimezone, freebusy, ics, vcs."
+    },
+    {
+      "module": "codebase-health",
+      "status": "conformant",
+      "reason": "Highest-value module for this project. Circular dependencies and boundary violations as errors is exactly the constraint that stops the sync engine and the transport from entangling. Duplication threshold 8% retained."
+    },
+    {
+      "module": "codebase-health/duplication",
+      "status": "conformant, stricter intent",
+      "reason": "Threshold 8% semantic retained; the project targets 0% duplication across adapter implementations. The adapter exemption is recorded as an ignore entry carrying a reason, not as a convention (plan rule 6)."
+    },
+    {
+      "module": "testing",
+      "status": "partial",
+      "reason": "Vitest applies and is the primary gate. React Testing Library, jest-dom, Playwright and axe-core are NOT APPLICABLE (headless service) and are deliberately not installed, which would trip Canon's own unused-deps rule. Node-environment project replaces Canon's jsdom baseline; see conflict C5."
+    },
+    {
+      "module": "ci",
+      "status": "partial",
+      "reason": "Four parallel fast jobs retained; the build job is retargeted per conflict C2 because there is no next build to run. accessibility.yml and e2e.yml are recorded not-applicable rather than created empty."
+    },
+    {
+      "module": "migration-allocator",
+      "status": "partial",
+      "reason": "Reservation discipline retained; directory re-pointed from supabase/migrations to migrations/ per conflict C4, which the module's own Conflicts clause sanctions."
+    },
+    {
+      "module": "auth",
+      "status": "not applicable",
+      "reason": "Conflict C3. The service authenticates to external calendar providers (Google OAuth, CalDAV), not to end users; there is no login page and no session proxy."
+    },
+    {
+      "module": "database",
+      "status": "not applicable",
+      "reason": "Conflict C1. Canon mandates Supabase Postgres server-side; the approved architecture makes Dolt/Beads authoritative and explicitly rejected a second source of truth. Replaced by Dolt schema migrations plus a generated Dolt row-type file (pnpm run gen:dolt-types)."
+    },
+    {
+      "module": "styling",
+      "status": "not applicable",
+      "reason": "No UI in the service. Tailwind, shadcn, CVA and lucide apply in full to a future operator UI, which is a separate project."
+    },
+    {
+      "module": "theming",
+      "status": "not applicable",
+      "reason": "Same as styling. next-themes needs a React tree this service does not have."
+    },
+    {
+      "module": "feedtack",
+      "status": "not applicable",
+      "reason": "Same as styling. Worth a stage of its own later if an operator UI is built; the Plan My Day lineage in project-g8dq makes that a real future want, but not now."
+    },
+    {
+      "module": "email",
+      "status": "not applicable",
+      "reason": "No transactional email. resend and react-email are not installed."
+    },
+    {
+      "module": "analytics",
+      "status": "not applicable",
+      "reason": "Service, not product surface. posthog is not installed; product analytics belong to a UI, if any."
+    },
+    {
+      "module": "errors",
+      "status": "partial",
+      "reason": "@sentry/nextjs is not applicable; plain @sentry/node for the daemon is, and lands when a long-running process exists (S6). Source maps and env-aware config apply as written."
+    },
+    {
+      "module": "utilities",
+      "status": "conformant",
+      "reason": "Zod is load-bearing here, not decorative: every MCP tool input, every external provider payload and every patch_json exception must validate at the boundary. It is NOT installed yet - installing an unused dependency at S0 is exactly what trips Canon's own unused-deps rule - and it lands with the first boundary-validated payload. date-fns is display-only at the edges; ical.js owns all recurrence and timezone arithmetic (conflict C6)."
+    }
+  ],
+  "bindingRules": [
+    {
+      "id": 1,
+      "rule": "strict TypeScript, no explicit any",
+      "enforcedBy": "tsconfig strict + biome noExplicitAny=error",
+      "rung": 2
+    },
+    {
+      "id": 2,
+      "rule": "no file over 250 lines outside the allowlist",
+      "enforcedBy": ".husky/pre-commit size guard (warn), size:check at S9 (merge condition)",
+      "rung": 2
+    },
+    {
+      "id": 3,
+      "rule": "no file over 100 columns",
+      "enforcedBy": "biome formatter lineWidth=100",
+      "rung": 2
+    },
+    {
+      "id": 4,
+      "rule": "cyclomatic <= 10, cognitive <= 15",
+      "enforcedBy": "fallow .fallowrc.json health",
+      "rung": 2
+    },
+    {
+      "id": 5,
+      "rule": "zero circular dependencies, zero boundary violations",
+      "enforcedBy": "fallow circular-dependencies=error, boundary-violations=error",
+      "rung": 2
+    },
+    {
+      "id": 6,
+      "rule": "duplication below 8%, adapter code held to a much lower bar",
+      "enforcedBy": "fallow duplicates.threshold=8 plus a suppression declared in .fallowrc.json and justified with a reason, a removal condition and an owner in docs/health-exemptions.json",
+      "rung": 2
+    },
+    {
+      "id": 7,
+      "rule": "one convention commit per stage, description <= 100 chars",
+      "enforcedBy": ".husky/commit-msg",
+      "rung": 2
+    },
+    {
+      "id": 8,
+      "rule": "nothing built before its stage entry condition; a stage is done when its exit command exits 0 and its evidence artifact is committed",
+      "enforcedBy": "stage template entry check + evidence/stage-NN artifact asserted by the next stage's suite",
+      "rung": 2
+    },
+    {
+      "id": 9,
+      "rule": "no silent degradation: every caught error is a typed state that fails its stage unless allowlisted with reason, expiry and approval",
+      "enforcedBy": "scripts/degradation-allowlist.json",
+      "rung": 2
+    },
+    {
+      "id": 10,
+      "rule": "deny-by-default write path: SyncPolicy allowlist, ownership token required for DELETE, quarantine with no automatic exit",
+      "enforcedBy": "type structure; unowned delete is unrepresentable",
+      "rung": 1
+    },
+    {
+      "id": "HUMAN-ONLY",
+      "rule": "irreversible actions pause for a human",
+      "enforcedBy": "stage template stop list (4 named actions)",
+      "rung": 4
+    }
+  ],
+  "boundaryRule": {
+    "domain": ["domain"],
+    "ports": ["domain", "ports"],
+    "sync": ["domain", "ports"],
+    "adapters": ["domain", "ports", "adapters"],
+    "note": "sync/ may never import a concrete adapter; it receives them injected. Enforced as fallow boundary-violations: error."
+  },
+  "humanGates": [
+    "Destructive cleanup of pre-existing external events.",
+    "Any write to a calendar outside the SyncPolicy allowlist.",
+    "A schema migration against the fleet-shared Dolt server.",
+    "Resolution of a specific quarantined conflict."
+  ]
+}

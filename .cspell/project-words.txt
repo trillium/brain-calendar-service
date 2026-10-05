@@ -1,0 +1,41 @@
+# Project-specific words for cspell
+# Add one word per line. Lines starting with # are comments.
+# This file is loaded by cspell.json via the "project-words" dictionary.
+BEADS
+Beads
+CalDAV
+Dolt
+Etag
+beads
+biome
+biomejs
+caldav
+dolt
+dtstamp
+etag
+exdate
+fallow
+fallowrc
+freebusy
+gitleaks
+ho6
+husky
+ical
+icaljs
+ics
+jsdom
+lg2t8
+lintstaged
+mdx
+mjs
+rdates
+recurrence
+repointed
+rrule
+sync-token
+synccollection
+tzid
+uid
+ujyse
+vcs
+vtimezone

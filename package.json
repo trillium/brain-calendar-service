@@ -1,0 +1,37 @@
+{
+  "name": "calendar-service",
+  "version": "0.0.0",
+  "private": true,
+  "description": "MCP-facing calendar and temporal-planning service; Beads/Dolt is the authoritative planning layer.",
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "type-check": "tsc --noEmit",
+    "test": "vitest",
+    "health": "fallow",
+    "health:audit": "fallow audit --format json",
+    "canon:audit": "node scripts/canon-audit.mjs",
+    "spellcheck": "cspell lint --no-must-find-files '**/*.{md,mdx,ts,tsx}'",
+    "prepare": "husky || true"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@biomejs/biome": "2.4.16",
+    "@types/node": "^22.0.0",
+    "cspell": "^10.0.0",
+    "fallow": "^1.0.0",
+    "husky": "^9.1.0",
+    "lint-staged": "^15.2.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.0"
+  },
+  "lint-staged": {
+    "*.{js,ts,json}": "biome check --write --no-errors-on-unmatched",
+    "*.{ts,tsx}": [
+      "node scripts/check-no-emoji.mjs",
+      "bash scripts/tsc-staged.sh"
+    ],
+    "*.{md,mdx}": "cspell lint --no-must-find-files"
+  }
+}
