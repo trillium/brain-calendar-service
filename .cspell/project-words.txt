@@ -6,6 +6,7 @@ beads
 Beads
 BEADS
 behaviour
+bigint
 biome
 biomejs
 BYDAY
@@ -38,6 +39,7 @@ IANA
 ical
 icaljs
 ics
+idempotency
 interleaving
 jsdom
 lg2t8
@@ -55,6 +57,7 @@ ntemporal
 olympus
 Olympus
 precondition
+quotas
 rdate
 RDATE
 rdates
@@ -71,6 +74,7 @@ SYNC
 sync-token
 synccollection
 syncs
+tee
 tzdata
 tzid
 uid
