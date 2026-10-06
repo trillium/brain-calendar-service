@@ -8,6 +8,7 @@ This is a greenfield scaffold. Nothing here talks to a calendar yet.
 - Plan (11 stages, each with a command-gated exit condition): `brain-lg2t8`
 - Canonical project status: `status-ho6`
 - Guardrail review folded into the plan: `brain-ujyse`
+- Run it yourself, and what it does not yet do: `docs/running-by-hand.md`
 
 ## Read this first
 
