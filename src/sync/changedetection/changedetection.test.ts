@@ -24,6 +24,21 @@ import { payloadHash, replay } from "./replay.js";
 // substrate outright.
 const PROBE = "sync_probe_period";
 
+/**
+ * Stage and commit ONLY this suite's probe table.
+ *
+ * `DOLT_ADD('.')` followed by `DOLT_COMMIT('-Am', ...)` stages and commits every
+ * modified table in the store, so a parallel suite's uncommitted rows were swept
+ * into this suite's history the moment it committed. That is how a row inserted
+ * by the schema suite ended up committed here, and then deleted - leaving the
+ * store permanently dirty and failing every later run. Owning the substrate is
+ * not enough; the commit has to be scoped to it too.
+ */
+const commitProbe = async (message: string) => {
+  await conn.query("CALL DOLT_ADD('-A', ?)", [PROBE]);
+  await conn.query("CALL DOLT_COMMIT('-m', ?)", [message]);
+};
+
 let conn: Connection;
 
 const createProbe = async () => {
@@ -38,8 +53,7 @@ const createProbe = async () => {
     updated_at DATETIME NOT NULL,
     UNIQUE KEY uq_probe_grain_start (grain, period_start_utc)
   ) ENGINE=InnoDB`);
-  await conn.query("CALL DOLT_ADD('.')");
-  await conn.query("CALL DOLT_COMMIT('-m', 's4 probe table')");
+  await commitProbe("s4 probe table");
 };
 
 beforeAll(async () => {
@@ -51,8 +65,7 @@ beforeAll(async () => {
 afterAll(async () => {
   try {
     await conn.query(`DROP TABLE IF EXISTS ${PROBE}`);
-    await conn.query("CALL DOLT_ADD('.')");
-    await conn.query("CALL DOLT_COMMIT('-Am', 's4 probe table dropped')");
+    await commitProbe("s4 probe table dropped");
   } finally {
     await conn?.end();
   }
@@ -76,8 +89,7 @@ const insertPeriod = async (
 };
 
 const commit = async (message: string) => {
-  await conn.query("CALL DOLT_ADD('.')");
-  await conn.query("CALL DOLT_COMMIT('-m', ?)", [message]);
+  await commitProbe(message);
 };
 
 describe("change detection over dolt history and diff", () => {

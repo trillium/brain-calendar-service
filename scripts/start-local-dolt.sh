@@ -24,8 +24,13 @@ case "${1:-start}" in
     fi
     mkdir -p "$DATA_DIR"
     if [[ ! -d "${DATA_DIR}/.dolt" ]]; then
-      DOLT_DATA_DIR="$DATA_DIR" dolt init --name brain-calendar-service \
-        --email brain-calendar-service@localhost >/dev/null
+      # `dolt init` resolves against the CURRENT directory, not only against
+      # DOLT_DATA_DIR, and refuses with "This directory has already been
+      # initialized" when the cwd holds a .dolt - which this repo's root does.
+      # Without the subshell a fresh clone can never start its own server, and
+      # the failure looks like a corrupt data directory rather than a cwd bug.
+      (cd "$DATA_DIR" && DOLT_DATA_DIR="$DATA_DIR" dolt init --name brain-calendar-service \
+        --email brain-calendar-service@localhost >/dev/null)
     fi
     nohup dolt sql-server -H 127.0.0.1 -P "$PORT" --data-dir "$DATA_DIR" \
       >"${DATA_DIR}/server.log" 2>&1 &
