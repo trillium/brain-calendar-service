@@ -1,0 +1,79 @@
+{
+  "stage": "S10",
+  "gate": "G8 - the service can be migrated and rolled out, and the rollback is proven rather than believed",
+  "exitCommand": "pnpm run rollout:dry-run --scenario backfill && pnpm run rollout:rollback-drill && pnpm run test -- src/sync/rollout --run",
+  "exitResult": "green, 0",
+  "phases": {
+    "order": ["shadow", "backfill", "pull-only", "bidirectional"],
+    "asAValueNotAFlag": "PHASES/RIGHTS are exported constants; a phase cannot be set from the command line",
+    "whyPullOnlyBeforeBidirectional": "cheapest place to discover wrong conflict semantics; one-directional blast radius",
+    "rights": {
+      "shadow": { "reads": true, "writes": false, "deletes": false },
+      "backfill": { "reads": true, "writes": true, "deletes": false },
+      "pull-only": { "reads": true, "writes": false, "deletes": false },
+      "bidirectional": { "reads": true, "writes": true, "deletes": false }
+    }
+  },
+  "backfill": {
+    "dryRun": "pnpm run rollout:dry-run --scenario backfill",
+    "candidates": 25,
+    "firstRun": { "created": 25, "skipped": 0 },
+    "secondRun": { "created": 0, "skipped": 25 },
+    "property": "the marker is checked BEFORE creating, so a re-run after a partial failure creates nothing twice",
+    "result": "PASS - second run created 0"
+  },
+  "rollbackDrill": {
+    "store": "disposable local Dolt on 127.0.0.1:3399, NOT the fleet-shared server on 3307",
+    "real": "real rows in calendar_period, uncommitted on purpose, then a real CALL DOLT_RESET('--hard', <checkpoint>)",
+    "measuredRtoMs": "11-23 ms on this machine; machine-dependent, never asserted",
+    "measuredRpoRows": 12,
+    "dominatedBy": "checkout, 77-91% of measured time",
+    "phasesTimed": ["detect", "checkout", "verify"],
+    "refusesDirtyStore": "exits non-zero when dolt_diff reports uncommitted DATA changes in the working set, rather than discarding another writer's rows",
+    "rowCountAfterRollbackIsCountedNotAsserted": "measureRollback takes rowsAfter back FROM restore; it is not a parameter",
+    "result": "PASS"
+  },
+  "testIsolationFixes": {
+    "why": "the test suite left real uncommitted rows in the store, so the drill's own refusal to discard another writer's rows correctly blocked it - the suites were the writer",
+    "changedetectionTest": "CALL DOLT_ADD('.') + DOLT_COMMIT('-Am', ...) staged and committed EVERY modified table, sweeping a parallel suite's uncommitted rows into its own history. Now scoped: DOLT_ADD('-A', 'sync_probe_period') and a staged-only commit.",
+    "schemaTest": "hardcoded 2027-01-01 00:00:00, the exact instant S4's replay commits into the shared calendar_period, so the suite went red on any store carrying that row. Moved to 2032-06-15, outside every fixture range in the repo.",
+    "startLocalDolt": "`dolt init` resolves against the CURRENT directory as well as DOLT_DATA_DIR, and refuses with 'This directory has already been initialized' because this repo's root holds a .dolt. A fresh clone could never start its own server; init now runs from inside the data directory.",
+    "verified": "on a freshly rebuilt disposable store the full suite passes twice, leaves NO uncommitted row differences, and the drill then runs"
+  },
+  "defectsFoundAndFixedInThisStage": [
+    "the drill never exited: the MySQL connection was left open, so the event loop stayed alive and the exit command hung forever after printing a verdict",
+    "the drill could not fail: rowsBefore/rowsAfter were hardcoded to 10/10 and restore only ran three COUNT queries, so result.ok was unconditionally true",
+    "measureRollback accepted rowsAfter as an INPUT, which is how a drill compares a hardcoded 10 to itself; it now comes back from restore",
+    "the drill's own cleanup deleted every period row from 2031 onward in a finally block, including on a REFUSAL - destroying exactly the rows the refusal exists to protect. Cleanup is now conditional on the drill having written",
+    "phases.ts declared existingMarkers as ReadonlyMap and then called .set() on it, so the stage did not type-check",
+    "changedetection.test.ts committed every modified table in the store, polluting the shared substrate and making schema.test.ts order-dependent",
+    "sync-soak-report.mts claimed a soak was 'one of the four human-pausing actions'; the four are destructive cleanup, writes outside the allowlist, schema migration against the fleet-shared server, and per-item conflict resolution"
+  ],
+  "humanGatesLeftFenced": {
+    "destructiveCleanupOfPreExistingExternalEvents": "represented as mayDelete(phase) === false for every phase and deletesFromProvider === false in every rights record",
+    "perItemQuarantinedConflictResolution": "calendar_conflict has no exit path and the service never sets resolved"
+  },
+  "entryCondition": {
+    "command": "pnpm run test -- evidence/stage-09 --run && pnpm run sync:soak-report --since <N>d",
+    "state": "NOT SATISFIED",
+    "why": "no soak report exists. A soak needs the service running against a real external calendar for a defined period, which needs live provider credentials this environment does not have and which is the captain's call, not a worker's.",
+    "whyItDidNotStopTheStage": "the soak is an ENTRY condition, not part of the exit command; the exit command is decidable and is green",
+    "recordedIn": "evidence/stage-10/skips.md"
+  },
+  "tests": {
+    "files": ["src/sync/rollout/rollout.test.ts"],
+    "total": 104,
+    "note": "the S10 exit command's `vitest -- src/sync/rollout --run` does not narrow the filter and runs all 104 tests; a stricter gate, not a looser one",
+    "orderIndependent": true
+  },
+  "whyItIsAStage": "the plan asks whether an existing deployment can be moved onto this service and moved back off it again; a sync engine that is correct on day one and unrecoverable on day two is not shippable",
+  "repositoryHealth": {
+    "sizeCheck": "PASS, 39 files, 0 violations",
+    "health": "fallow clean, 0 issues",
+    "typeCheck": "PASS",
+    "lint": "PASS (4 pre-existing unused-variable warnings in orchestration/plan.ts and src/mcp)",
+    "spellcheck": "PASS after adding the plural 'uids' to the project dictionary",
+    "canonAudit": "PASS",
+    "dbVerify": "PASS, 6/6 tables, 51 columns, 15 indexes"
+  }
+}

@@ -307,6 +307,16 @@ describe("calendar_conflict", () => {
 });
 
 describe("calendar_period", () => {
+  /**
+   * An instant no other suite writes, because calendar_period is a SHARED
+   * table: S4's replay and every sync run commit real rows into it. Hardcoding
+   * a date another run also uses makes this suite's outcome depend on what
+   * happened to be in the store, which is the same order-dependence S5 had.
+   * 2032 is outside every fixture range in the repo (replay fixtures, S4's
+   * probe, and S10's drill rows at 2031).
+   */
+  const UNIQUE_PROBE_START = "2032-06-15 00:00:00";
+  const UNIQUE_PROBE_END = "2032-06-16 00:00:00";
   it("round-trips a day, a week and a month as three distinct records", async () => {
     const ts = now();
     const before = await rowCount("calendar_period");
@@ -341,15 +351,15 @@ describe("calendar_period", () => {
     const first = await exec(
       `INSERT INTO calendar_period
          (grain, period_start_utc, period_end_utc, attributes_json, created_at, updated_at)
-       VALUES ('day', '2027-01-01 00:00:00', '2027-01-02 00:00:00', '{}', ?, ?)`,
-      [ts, ts],
+       VALUES ('day', ?, ?, '{}', ?, ?)`,
+      [UNIQUE_PROBE_START, UNIQUE_PROBE_END, ts, ts],
     );
     await expect(
       exec(
         `INSERT INTO calendar_period
            (grain, period_start_utc, period_end_utc, attributes_json, created_at, updated_at)
-         VALUES ('day', '2027-01-01 00:00:00', '2027-01-02 00:00:00', '{}', ?, ?)`,
-        [ts, ts],
+         VALUES ('day', ?, ?, '{}', ?, ?)`,
+        [UNIQUE_PROBE_START, UNIQUE_PROBE_END, ts, ts],
       ),
     ).rejects.toThrow();
     await exec("DELETE FROM calendar_period WHERE id = ?", [first.insertId]);

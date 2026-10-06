@@ -12,6 +12,7 @@ four headings, so you can read one and know what the others look like.
 | 5 | CalDAV transport | [caldav.md](caldav.md) | seconds, local server |
 | 6 | orchestration and quarantine | [orchestration.md](orchestration.md) | seconds, needs Dolt |
 | 7 | MCP surface | [mcp.md](mcp.md) | ~1 minute, spawns a process |
+| 8 | rollout and migration | [rollout.md](rollout.md) | seconds, needs Dolt |
 
 Sweep from the top: the first two are pure and hermetic, so a failure there is
 unambiguous and needs nothing running.
