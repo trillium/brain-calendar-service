@@ -9,6 +9,9 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
+    // Suites share one Dolt working set and one staging area; parallel files race on it.
+    fileParallelism: false,
+    globalSetup: ["scripts/vitest-global-dolt.mts"],
     globals: true,
     include: ["src/**/*.{test,spec}.ts"],
   },

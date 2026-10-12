@@ -6,10 +6,13 @@
 // For S2 that artifact is the decision table itself - executed, counted, and
 // written out - rather than console output that disappears.
 //
-// This is a test file on purpose: it runs as part of the stage's exit command,
-// which is what makes "the exit command emits the artifact" literally true.
+// This is a test file on purpose: it runs as part of the stage's exit command.
+// It ASSERTS the committed artifact equals the freshly executed one, so a
+// drifted value fails the suite instead of silently rewriting a tracked file.
+// To regenerate after an intended change: UPDATE_EVIDENCE=1 pnpm run test -- --run
+// then `pnpm run format` (the committed JSON is Biome-formatted).
 
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -20,11 +23,12 @@ import { canonical, type Occurrence } from "./types.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const OUT = resolve(ROOT, "evidence", "stage-02");
+const UPDATE = process.env.UPDATE_EVIDENCE === "1";
 
 const SWEEP = pairs(20260301, 2000);
 
 describe("S2 evidence artifact", () => {
-  it("writes the executed decision table and its totals", () => {
+  it("matches the committed decision table and its totals", () => {
     const table = runTable();
     const reasons = new Map<string, number>();
     let bothRetained = 0;
@@ -81,9 +85,6 @@ ${[...reasons.entries()]
   .join("\n")}
 `;
 
-    mkdirSync(OUT, { recursive: true });
-    writeFileSync(resolve(OUT, "decision-table.md"), markdown);
-
     const artifact = {
       stage: "S2",
       generatedBy: "src/domain/rfc5546/emit-artifact.test.ts",
@@ -101,8 +102,15 @@ ${[...reasons.entries()]
       propertiesProven: ["idempotence", "commutativity", "stability"],
       total: unknown === 0,
     };
-    expect(existsSync(resolve(OUT, "decision-table.md"))).toBe(true);
-    writeFileSync(resolve(OUT, "artifact.json"), `${JSON.stringify(artifact, null, 2)}\n`);
+
+    if (UPDATE) {
+      mkdirSync(OUT, { recursive: true });
+      writeFileSync(resolve(OUT, "decision-table.md"), markdown);
+      writeFileSync(resolve(OUT, "artifact.json"), `${JSON.stringify(artifact, null, 2)}\n`);
+      return;
+    }
+    expect(readFileSync(resolve(OUT, "decision-table.md"), "utf8")).toBe(markdown);
+    expect(JSON.parse(readFileSync(resolve(OUT, "artifact.json"), "utf8"))).toEqual(artifact);
   });
 
   it("keeps a loser payload verbatim so a human can undo a resolution", () => {

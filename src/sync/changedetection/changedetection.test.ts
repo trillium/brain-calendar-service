@@ -36,7 +36,9 @@ const PROBE = "sync_probe_period";
  */
 const commitProbe = async (message: string) => {
   await conn.query("CALL DOLT_ADD('-A', ?)", [PROBE]);
-  await conn.query("CALL DOLT_COMMIT('-m', ?)", [message]);
+  // --allow-empty: a change reverted inside the window nets to no diff, but the test
+  // still needs the commit to exist to prove detection sees no change across it.
+  await conn.query("CALL DOLT_COMMIT('--allow-empty', '-m', ?)", [message]);
 };
 
 let conn: Connection;
