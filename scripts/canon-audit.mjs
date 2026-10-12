@@ -23,6 +23,12 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CANON = process.env.CANON_ROOT ?? join(homedir(), "code", "canon");
 const TEMPLATE = join(CANON, "template");
+if (!existsSync(TEMPLATE)) {
+  console.error(`canon:audit: Canon not found at ${CANON} (no template/ directory there).`);
+  console.error("  This is not drift. Point CANON_ROOT at a Canon checkout and re-run:");
+  console.error("    CANON_ROOT=/path/to/canon pnpm run canon:audit");
+  process.exit(2);
+}
 const WRITE = process.argv.includes("--write");
 
 const sha256 = (buf) => createHash("sha256").update(buf).digest("hex");

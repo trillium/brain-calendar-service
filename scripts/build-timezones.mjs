@@ -147,8 +147,16 @@ ${lines.join("\n")}
 `;
 };
 
+/** The checked-in file is biome-formatted, so compare and write the formatted form. */
+const formatted = (source) =>
+  execFileSync(
+    join(ROOT, "node_modules", ".bin", "biome"),
+    ["format", `--stdin-file-path=${OUT}`],
+    { input: source, cwd: ROOT },
+  ).toString();
+
 const check = process.argv.includes("--check");
-const next = build();
+const next = formatted(build());
 mkdirSync(dirname(OUT), { recursive: true });
 
 if (check) {
