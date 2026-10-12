@@ -67,4 +67,42 @@ describe("tool surface", () => {
     const out = dispatch(store(), "list_quarantined", {}) as { automaticResolution: boolean };
     expect(out.automaticResolution).toBe(false);
   });
+
+  it("calls every tool through dispatch with real, valid arguments", () => {
+    const valid: Record<string, unknown> = {
+      query_period: { grain: "day", startUtc: "2026-04-01T00:00:00", zone: "UTC" },
+      propose_day: {
+        zone: "UTC",
+        date: "2026-04-02",
+        items: [{ summary: "review", startLocal: "2026-04-02T09:00:00", minutes: 30 }],
+      },
+      move_commitment: { beadId: "standup", newStartUtc: "2026-04-01T11:00:00Z" },
+      link_external: { beadId: "standup", calendarId: "cal-1", externalUid: "uid-1" },
+      unlink_external: { beadId: "standup", calendarId: "cal-1" },
+      list_changes: {},
+      list_quarantined: {},
+    };
+    expect(Object.keys(valid).sort()).toEqual(TOOLS.map((t) => t.name).sort());
+    for (const tool of TOOLS) {
+      expect(() => dispatch(store(), tool.name, valid[tool.name]), tool.name).not.toThrow();
+    }
+  });
+
+  it("lists changes, optionally filtered by bead", () => {
+    const s = store();
+    expect(dispatch(s, "list_changes", {})).toHaveLength(1);
+    expect(dispatch(s, "list_changes", { beadId: "standup" })).toHaveLength(1);
+    expect(dispatch(s, "list_changes", { beadId: "ghost" })).toHaveLength(0);
+    expect(() => dispatch(s, "list_changes", { beadId: "" })).toThrow();
+  });
+
+  it("persists a proposed day so a later read sees it", () => {
+    const s = newStore();
+    dispatch(s, "propose_day", {
+      zone: "UTC",
+      date: "2026-04-02",
+      items: [{ summary: "review", startLocal: "2026-04-02T09:00:00", minutes: 30 }],
+    });
+    expect(dispatch(s, "list_changes", { beadId: "review" })).toHaveLength(1);
+  });
 });

@@ -65,17 +65,26 @@ export const queryPeriod = (store: Store, raw: unknown) => {
 
 const proposeDay = (store: Store, raw: unknown) => {
   const input = ProposeDay.parse(raw);
-  const occurrences = expand({
-    uid: `proposed-${input.date}`,
-    dtstart: `${input.date}T09:00:00`,
-    zone: input.zone,
-    durationSeconds: input.items[0].minutes * 60,
-    rrule: "FREQ=DAILY;COUNT=1",
+  const planned = input.items.map((item) => {
+    const [first] = expand({
+      uid: `proposed-${input.date}-${item.summary}`,
+      dtstart: item.startLocal,
+      zone: input.zone,
+      durationSeconds: item.minutes * 60,
+      rrule: "FREQ=DAILY;COUNT=1",
+    });
+    const startUtc = first?.recurrenceIdUtc ?? null;
+    return { item, startUtc };
   });
+  for (const { item, startUtc } of planned) {
+    if (startUtc === null) continue;
+    const endUtc = new Date(Date.parse(startUtc) + item.minutes * 60_000).toISOString();
+    store.periods.push({ grain: "day", startUtc, endUtc, summary: item.summary });
+  }
   return {
     date: input.date,
     zone: input.zone,
-    firstOccurrenceUtc: occurrences[0]?.recurrenceIdUtc ?? null,
+    firstOccurrenceUtc: planned[0]?.startUtc ?? null,
     items: input.items.length,
   };
 };
@@ -98,10 +107,13 @@ const unlinkExternal = (_store: Store, raw: unknown) => {
   return { unlinked: true, ...input };
 };
 
+const ListChanges = z.object({ beadId: z.string().min(1).optional() });
+
 const listChanges = (store: Store, raw: unknown) => {
-  const input = MoveCommitment.shape.beadId.or(z.string().min(1)).parse(raw);
-  void input;
-  return store.periods.map((p) => ({ beadId: p.summary, startUtc: p.startUtc, endUtc: p.endUtc }));
+  const input = ListChanges.parse(raw);
+  return store.periods
+    .filter((p) => input.beadId === undefined || p.summary === input.beadId)
+    .map((p) => ({ beadId: p.summary, startUtc: p.startUtc, endUtc: p.endUtc }));
 };
 
 const listQuarantined = (store: Store) => ({
@@ -110,7 +122,6 @@ const listQuarantined = (store: Store) => ({
   note: "Quarantine has no exit path; resolving one is a human decision.",
 });
 
-const ListChanges = z.object({ beadId: z.string().min(1).optional() });
 const Nothing = z.object({});
 
 export const TOOLS = [

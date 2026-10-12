@@ -44,6 +44,12 @@ const parse = (result: unknown): Record<string, unknown> => {
   return JSON.parse(content[0]?.text ?? "{}") as Record<string, unknown>;
 };
 
+const readChanges = async (beadId: string) => {
+  const result = await client.callTool({ name: "list_changes", arguments: { beadId } });
+  const content = (result as { content?: { text?: string }[] }).content ?? [];
+  return JSON.parse(content[0]?.text ?? "null") as unknown[];
+};
+
 // READ tool first: the store starts empty, so the query must return nothing.
 const before = parse(
   await client.callTool({
@@ -53,7 +59,7 @@ const before = parse(
 );
 if (!Array.isArray(before.periods)) failures.push("read tool did not return a periods array");
 
-// WRITE tool: propose a day, then move a commitment named after it.
+// WRITE tool: propose a day, which must persist its items.
 const proposed = parse(
   await client.callTool({
     name: "propose_day",
@@ -68,13 +74,30 @@ if (typeof proposed.firstOccurrenceUtc !== "string") {
   failures.push("write tool did not return a resolved UTC occurrence");
 }
 
+// Read the write back through two different tools, then mutate it and read again.
+const written = (await readChanges("standup")) as { startUtc: string }[];
+if (written.length !== 1) failures.push(`propose_day was not read back: ${written.length} changes`);
+const afterQuery = parse(
+  await client.callTool({
+    name: "query_period",
+    arguments: { grain: "day", startUtc: "2026-04-01T00:00:00", zone: "UTC" },
+  }),
+);
+if ((afterQuery.periods as unknown[]).length !== 1) {
+  failures.push("query_period did not see the proposed day");
+}
+
 const moved = parse(
   await client.callTool({
     name: "move_commitment",
     arguments: { beadId: "standup", newStartUtc: "2026-04-01T10:00:00Z" },
   }),
 );
-void moved;
+if (moved.moved !== true) failures.push("move_commitment did not move the proposed commitment");
+const movedBack = (await readChanges("standup")) as { startUtc: string }[];
+if (movedBack[0]?.startUtc !== "2026-04-01T10:00:00Z") {
+  failures.push(`move was not read back: ${movedBack[0]?.startUtc}`);
+}
 
 // READ AGAIN, through a different tool: the quarantined list must be reachable
 // and must declare that it has no automatic resolution.
