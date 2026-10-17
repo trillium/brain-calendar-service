@@ -11,6 +11,11 @@
 // chooses, so a retried INSERT that actually landed returns the existing event
 // instead of creating a second one.
 
+import { fileURLToPath } from "node:url";
+import { createTokenSource, loadCredentials } from "../../adapters/caldav/auth.js";
+import { createGoogleReader } from "../../adapters/gcal/reader.js";
+import type { Occurrence } from "../../domain/rfc5546/types.js";
+
 export interface EventPayload {
   readonly summary: string;
   readonly startUtc: string;
@@ -45,9 +50,67 @@ export interface CalendarProvider {
   ): Promise<ProviderEvent>;
 }
 
+/** One provider request as observed. Method and status only: a URL names the calendar. */
+interface ObservedCall {
+  readonly method: string;
+  readonly status?: number;
+}
+
+export interface RemoteRead {
+  readonly occurrences: readonly Occurrence[];
+  /** What the transport actually sent. The plan records these, it does not assume them. */
+  readonly calls: readonly ObservedCall[];
+}
+
+/** The read half. It has no write method to call, so reading cannot mutate a calendar. */
+interface RemoteReader {
+  readWindow(
+    calendarId: string,
+    window: { readonly from: string; readonly to: string },
+  ): Promise<RemoteRead>;
+}
+
+interface ConfiguredProvider {
+  readonly reader: RemoteReader;
+  /**
+   * Null until the write path is built and approved. A sync:once that has
+   * changes to apply and no writer refuses before writing anything.
+   */
+  readonly writer: CalendarProvider | null;
+}
+
+const CREDENTIAL_VARS = [
+  "CALENDAR_OAUTH_CLIENT_ID",
+  "CALENDAR_OAUTH_CLIENT_SECRET",
+  "CALENDAR_OAUTH_REFRESH_TOKEN",
+  "CALENDAR_OAUTH_FILE",
+] as const;
+
+const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
+
+interface ProviderDeps {
+  readonly env?: Readonly<Record<string, string | undefined>>;
+  readonly fetch?: typeof fetch;
+  readonly now?: () => number;
+  readonly repoRoot?: string;
+}
+
 /**
- * The provider sync:once applies to. There is no implementation for a real
- * calendar yet, so this returns null and the live path refuses before writing.
- * Returning a stand-in here would record bindings for events that exist nowhere.
+ * The provider sync:once talks to: Google Calendar API v3, read only for now.
+ *
+ * Returns null only when NO credential variable is set at all, which means "not
+ * configured" and lets a dry-run say so. A partly configured environment is a
+ * mistake worth failing on, so it throws CredentialsError naming the missing
+ * variable (never a value) instead of quietly falling back to "no provider".
+ * Credentials are read from variables by NAME and are never logged.
  */
-export const configuredProvider = (): CalendarProvider | null => null;
+export const configuredProvider = (deps: ProviderDeps = {}): ConfiguredProvider | null => {
+  const env = deps.env ?? process.env;
+  if (CREDENTIAL_VARS.every((name) => !env[name])) return null;
+  const doFetch = deps.fetch ?? fetch;
+  const loaded = loadCredentials({ env, repoRoot: deps.repoRoot ?? REPO_ROOT });
+  const auth = createTokenSource(loaded, { fetch: doFetch, now: deps.now ?? Date.now });
+  // Like CALENDAR_OAUTH_TOKEN_URL, a test seam; createGoogleReader still insists on https or loopback.
+  const baseUrl = env.CALENDAR_GOOGLE_BASE_URL;
+  return { reader: createGoogleReader({ auth, fetch: doFetch, baseUrl }), writer: null };
+};

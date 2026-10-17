@@ -50,7 +50,9 @@ interface Quarantine {
 
 interface Observations {
   rowDeltas: Record<string, number>;
-  providerCalls: { method: string }[];
+  providerCalls: { method: string; status?: number }[];
+  /** Events the remote read returned, or null when no read was performed. */
+  remoteOccurrences: number | null;
   gitHeadBefore: string | null;
   gitHeadAfter: string | null;
 }
@@ -79,7 +81,9 @@ interface CycleInput {
   readonly calendarId: string;
   readonly provider: string;
   readonly remoteChanges: readonly Occurrence[];
-  readonly providerCalls: readonly { method: string }[];
+  readonly providerCalls: readonly { method: string; status?: number }[];
+  /** How many events the remote read returned; omit when no read happened. */
+  readonly remoteOccurrences?: number | null;
   readonly gitHead: () => string | null;
   /** Defaults to true: planning never writes. The live path says so explicitly. */
   readonly dryRun?: boolean;
@@ -165,6 +169,7 @@ export const buildSyncPlan = async (input: CycleInput): Promise<SyncPlan> => {
     observations: {
       rowDeltas,
       providerCalls: [...input.providerCalls],
+      remoteOccurrences: input.remoteOccurrences ?? null,
       gitHeadBefore: input.gitHead(),
       gitHeadAfter: input.gitHead(),
     },

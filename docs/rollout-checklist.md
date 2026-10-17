@@ -21,7 +21,7 @@ Work stops at the first CAPTAIN-CREDENTIAL step (step 9).
 | 5 | Backfill idempotence | DONE-verified | `pnpm run rollout:dry-run --scenario backfill`: run 1 created 25, run 2 created 0 |
 | 6 | Rollback drill | DONE-verified | `pnpm run rollout:rollback-drill`: RTO 12 ms, 12 rows discarded, back to 0 rows. Run it on a clean store (see Known traps). |
 | 7 | MCP tools read and write Dolt (limitation L1 in `running-by-hand.md`) | NOT-BUILT | `src/mcp/` holds an in-process `Store`; state does not survive a call |
-| 8 | Real `CalendarProvider` (CalDAV PUT with `If-None-Match: *` / `If-Match`) returned from `configuredProvider()` (L3) | NOT-BUILT | only the in-memory fake has ever run |
+| 8 | Real `CalendarProvider` returned from `configuredProvider()` (L3, L7) | READ built, WRITE NOT-BUILT | Google Calendar API v3 reader (`src/adapters/gcal/`) is built and fixture-tested; the writer is `null`, and only the in-memory fake has ever run a write |
 | 9 | Google OAuth client id and secret | **CAPTAIN-CREDENTIAL** | env `CALENDAR_OAUTH_CLIENT_ID` / `_SECRET`, or a 0600 file outside the repo via `CALENDAR_OAUTH_FILE` |
 | 10 | OAuth refresh token for the account | CAPTAIN-CREDENTIAL | `CALENDAR_OAUTH_REFRESH_TOKEN`; plumbing in `src/adapters/caldav/auth.ts` has never met a real account (L4) |
 | 11 | Calendar id to sync | CAPTAIN-CREDENTIAL | pick one you do not mind changing |

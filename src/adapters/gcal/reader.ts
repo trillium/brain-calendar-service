@@ -49,7 +49,7 @@ const ErrorBody = z.object({
   error: z.object({ errors: z.array(z.object({ reason: z.string() })).min(1) }),
 });
 
-export interface ReadWindow {
+interface ReadWindow {
   /** ISO instant, inclusive. */
   readonly from: string;
   /** ISO instant, exclusive. */
@@ -62,7 +62,7 @@ interface ObservedCall {
   readonly status: number;
 }
 
-export interface GoogleRead {
+interface GoogleRead {
   /** Every item in the window, cancelled ones included (payload.status says which). */
   readonly occurrences: readonly Occurrence[];
   readonly calls: readonly ObservedCall[];

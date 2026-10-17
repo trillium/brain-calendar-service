@@ -5,6 +5,12 @@
 //   pnpm run sync:verify-plan /tmp/plan.json
 //   pnpm run sync:once --calendar <id>          # the live path
 //
+// Remote read: when OAuth credentials are in the environment (CALENDAR_OAUTH_*,
+// by name; see src/adapters/caldav/auth.ts) the cycle first READS the Google
+// calendar named by --remote-calendar (default $CALENDAR_REMOTE_ID, then
+// "primary") for the window --from/--to (default 30 days back to 60 ahead).
+// A read is GET only. The plan records the requests that were actually sent.
+//
 // A dry-run writes nothing to Dolt and nothing to a provider, and the plan it
 // emits carries the OBSERVATIONS that prove it, not a promise that it did.
 
@@ -12,7 +18,7 @@ import { execSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createConnection } from "mysql2/promise";
 import { applyPlan } from "../src/sync/apply/apply.ts";
-import { configuredProvider } from "../src/sync/apply/provider.ts";
+import { configuredProvider, type RemoteRead } from "../src/sync/apply/provider.ts";
 import type { ApplyResult } from "../src/sync/apply/types.ts";
 import { buildSyncPlan, cyclePolicy } from "../src/sync/orchestration/plan.ts";
 
@@ -33,6 +39,12 @@ const calendarIdNumber = Number(calendarId);
 if (!Number.isInteger(calendarIdNumber)) {
   throw new Error(`--calendar must resolve to an integer id, got "${calendarAlias}"`);
 }
+const remoteCalendar = value("remote-calendar", process.env.CALENDAR_REMOTE_ID ?? "primary");
+const DAY_MS = 24 * 3600 * 1000;
+const window = {
+  from: value("from", new Date(Date.now() - 30 * DAY_MS).toISOString()),
+  to: value("to", new Date(Date.now() + 60 * DAY_MS).toISOString()),
+};
 const dryRun = flag("dry-run");
 const json = flag("json");
 const gitHead = () => {
@@ -87,12 +99,26 @@ try {
   };
   const rowsBefore = await countRows();
 
+  // The remote read. Observed, not assumed: whatever the transport sent is what
+  // the plan records, and no configured provider means no read and a null count.
+  const configured = configuredProvider();
+  let remote: RemoteRead | null = null;
+  if (configured === null) {
+    console.error(
+      "sync:once: no OAuth credentials in the environment; remote read skipped " +
+        "(the plan's observations.remoteOccurrences is null).",
+    );
+  } else {
+    remote = await configured.reader.readWindow(remoteCalendar, window);
+  }
+
   const plan = await buildSyncPlan({
     conn,
     calendarId: String(calendarIdNumber),
     provider: "google",
-    remoteChanges: [],
-    providerCalls: [{ method: "PROPFIND" }, { method: "REPORT" }],
+    remoteChanges: remote?.occurrences ?? [],
+    providerCalls: remote?.calls ?? [],
+    remoteOccurrences: remote === null ? null : remote.occurrences.length,
     gitHead,
     dryRun,
   });
@@ -105,13 +131,14 @@ try {
   let applied: ApplyResult | null = null;
   const work = plan.push.length + plan.pull.length;
   if (!dryRun && work > 0) {
-    const provider = configuredProvider();
+    const provider = configured?.writer ?? null;
     if (provider === null) {
       // Refuse BEFORE any write rather than apply against a stand-in and record
-      // bindings for events that do not exist anywhere.
+      // bindings for events that do not exist anywhere. A read-only provider has
+      // no writer, so it lands here too.
       console.error(
-        `sync:once: ${work} change(s) to apply, but no CalendarProvider is configured. ` +
-          "Nothing was written. See docs/running-by-hand.md (L3).",
+        `sync:once: ${work} change(s) to apply, but no writable CalendarProvider is ` +
+          "configured. Nothing was written. See docs/running-by-hand.md (L3).",
       );
       process.exit(1);
     }
@@ -141,7 +168,8 @@ try {
   } else {
     console.log(
       `sync:once calendar=${calendarIdNumber} dryRun=${dryRun} push=${plan.push.length} ` +
-        `pull=${plan.pull.length} conflicts_quarantined=${plan.conflictsQuarantined}`,
+        `pull=${plan.pull.length} conflicts_quarantined=${plan.conflictsQuarantined} ` +
+        `remote_events=${plan.observations.remoteOccurrences ?? "not-read"}`,
     );
   }
 

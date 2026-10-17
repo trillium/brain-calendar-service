@@ -30,7 +30,8 @@ interface Plan {
   quarantined: unknown[];
   observations: {
     rowDeltas: Record<string, number>;
-    providerCalls: { method: string }[];
+    providerCalls: { method: string; status?: number }[];
+    remoteOccurrences?: number | null;
     gitHeadBefore: string | null;
     gitHeadAfter: string | null;
   };
@@ -95,6 +96,9 @@ console.log(
 console.log(`  observed row deltas: ${JSON.stringify(plan.observations.rowDeltas)}`);
 console.log(
   `  observed provider calls: ${plan.observations.providerCalls.map((c) => c.method).join(",") || "none"}`,
+);
+console.log(
+  `  remote read: ${plan.observations.remoteOccurrences == null ? "not performed" : `${plan.observations.remoteOccurrences} event(s)`}`,
 );
 console.log(
   `  git head unchanged: ${plan.observations.gitHeadBefore === plan.observations.gitHeadAfter}`,

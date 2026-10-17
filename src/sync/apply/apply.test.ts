@@ -355,7 +355,13 @@ describe("pull: a winning remote change lands locally", () => {
     ],
     quarantined: [],
     conflictsQuarantined: 0,
-    observations: { rowDeltas: {}, providerCalls: [], gitHeadBefore: null, gitHeadAfter: null },
+    observations: {
+      rowDeltas: {},
+      providerCalls: [],
+      remoteOccurrences: null,
+      gitHeadBefore: null,
+      gitHeadAfter: null,
+    },
   });
 
   it("writes the remote times and sequence onto the bound bead, with no provider call", async () => {

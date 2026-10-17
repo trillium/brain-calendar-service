@@ -81,11 +81,17 @@ pnpm run sync:once --calendar cal-1 --dry-run --json | tee /tmp/plan.json && pnp
 sync:verify-plan
   push: 0  pull: 0  quarantined: 2
   observed row deltas: {"calendar_period":0,"calendar_binding":0}
-  observed provider calls: PROPFIND,REPORT
+  observed provider calls: none
+  remote read: not performed
   git head unchanged: true
 
 sync:verify-plan PASSED: the plan is well-formed AND was not executed
 ```
+With no OAuth variables set, nothing is read from a provider and the plan says so
+(`observed provider calls: none`, `remote read: not performed`). With them set,
+the same command reads the calendar first; see
+[L7](#l7-sync-once-reads-google-calendar-api-v3-read-only).
+
 On a store with no cursor, `quarantined: 2` is the honest answer, not a failure:
 both temporal tables report `no cursor recorded yet`, and the code says so rather
 than reporting an empty diff.
@@ -193,8 +199,8 @@ now exists (`src/adapters/caldav/auth.ts`, see
 The file must be **outside the repository** and mode **0600**, or loading refuses.
 A file is also where a refreshed access token (and a rotated refresh token) is
 saved; with environment variables alone, tokens live in memory only. Do not put
-any of these in the repo. Nothing in `sync:once` calls this yet, because there is
-no provider for it to authorise.
+any of these in the repo. `sync:once` uses them for the read-only Google Calendar
+v3 read described in L7. There is still no write provider.
 
 ## What this does not prove
 
@@ -321,6 +327,40 @@ runs only that directory (2 files, 38 tests) instead of the whole suite. The
 stage gates in `canon-profile.json` are therefore real scoped runs now.
 `src/mcp/test-hygiene.test.ts` asserts a scoped run executes one file.
 
+### L7: sync:once reads Google Calendar API v3 (read only)
+
+The CalDAV route is blocked at Google for the soak's OAuth client (CalDAV API not
+enabled), so Google is reached through Calendar API v3
+(`src/adapters/gcal/`), reusing the OAuth code from L4. When any
+`CALENDAR_OAUTH_*` variable is set, `configuredProvider()` returns a reader
+(a partial set fails naming the missing variable; none set returns null). Then
+`sync:once` reads before planning:
+
+```sh
+pnpm run sync:once --calendar cal-1 --dry-run --json \
+  --remote-calendar primary --from 2026-09-17T00:00:00Z --to 2026-11-17T00:00:00Z
+```
+
+- `--remote-calendar` defaults to `$CALENDAR_REMOTE_ID`, then `primary`. `--from`
+  and `--to` default to 30 days back and 60 days ahead.
+- The request is a `GET` of `events` with `singleEvents=true` and
+  `showDeleted=true`, asking Google only for the fields the mapping uses (attendee
+  response status, never addresses). It is paginated; more than 40 pages is an
+  error, not a partial read.
+- `observations.providerCalls` is what was sent (method and status), and
+  `observations.remoteOccurrences` is how many events came back (`null` means no
+  read happened). `sync:verify-plan` prints both. The OAuth token exchange is a
+  `POST` to Google's token endpoint and is deliberately not listed as a calendar
+  call.
+- `CALENDAR_GOOGLE_BASE_URL` overrides the API base for tests; it must be https
+  or loopback.
+- The writer half of `configuredProvider()` is `null`. A live `sync:once` with
+  changes to apply still exits 1 before writing. The write path is a separate task.
+
+**Still missing.** `buildSyncPlan` still compares each remote event with a copy of
+itself, so a real read produces no pulls yet: the local side is not looked up. The
+incremental `syncToken` mode is not built; every run reads the whole window.
+
 ## More tests worth running
 
 All six were run on this branch and all six passed.
@@ -370,8 +410,8 @@ In order, and none of them are a task for this document:
 
 1. Give the tools a real store: read `calendar_period` from Dolt instead of an
    empty in-process array, and write through it (L1).
-2. Write a real `CalendarProvider` (CalDAV `PUT` with `If-None-Match: *` for
-   create and `If-Match` for update, over `fetchTransport` with the token source)
-   and return it from `configuredProvider()` (L3).
+2. Write the WRITE half of the provider (Calendar API v3 insert and update, with
+   ownership tokens) and return it as `writer` from `configuredProvider()`. The
+   read half exists (L7).
 3. Supply real credentials and run it against a calendar you do not mind
    changing, which turns every UNVERIFIED above into a finding (L3, L4).

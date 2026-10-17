@@ -255,7 +255,7 @@ describe("guards on the inputs", () => {
     ).not.toThrow();
   });
 
-  it("refuses an inverted or unparseable window before any request", async () => {
+  it("refuses an inverted or malformed window before any request", async () => {
     const { reader: r, seen } = reader([]);
     await expect(r.readWindow("primary", { from: WINDOW.to, to: WINDOW.from })).rejects.toThrow(
       /before/,
