@@ -199,24 +199,35 @@ no provider for it to authorise.
 ## What this does not prove
 
 Found by running it, not by reading the tests. Each of these was invisible to the
-104 green tests that existed when they were found. L2, L3 and L4 are now addressed
-below; L1, L5 and L6 are not.
+104 green tests that existed when they were found. L1, L2, L3, L4, L5 and L6 are
+now addressed below; what each fix does and does not prove is stated with it.
 
-### L1: no tool reads or writes the database
+### L1: the MCP tools now read and write Dolt (fixed)
 
-`src/mcp/` contains no reference to mysql, dolt, or any connection. The tools
-read and write an in-process `Store` that starts empty, and nothing in the tool
-surface ever puts a row into it. So over a real connection, `query_period`
-always returns `"periods":[]` and `move_commitment` always returns
-`{"moved":false,"reason":"no commitment named standup"}` - both confirmed above.
+`src/mcp/entry.ts` is the composition root. When any of `CALENDAR_DB_HOST`,
+`CALENDAR_DB_PORT` or `CALENDAR_DB_NAME` is set, the tools are backed by
+`src/adapters/dolt/store.ts` over `calendar_period` and `calendar_conflict`.
+With none set, they fall back to the in-process store, which starts empty and
+forgets everything when the process exits. A configured database that cannot be
+reached is a fatal start-up error, never a quiet fall back.
 
-The tests do not catch this because `tools.test.ts` seeds the store by hand
-before calling anything. `mcp:smoke` does not catch it because it calls
-`move_commitment`, discards the answer with `void moved`, and then reads a
-different tool. Its closing line claims a read-after-write; there was no write.
+```sh
+bash scripts/start-local-dolt.sh start && pnpm run db:migrate
+CALENDAR_DB_PORT=3399 pnpm run mcp:call -- propose_day '{"zone":"UTC","date":"2026-04-01","items":[{"summary":"standup","startLocal":"2026-04-01T09:00:00","minutes":15}]}'
+CALENDAR_DB_PORT=3399 pnpm run mcp:call -- query_period '{"grain":"day","startUtc":"2026-04-01T00:00:00","zone":"UTC"}'
+```
+The second command is a different process and returns what the first wrote.
+`propose_day` previously wrote nothing at all; it now stores one period per
+item, resolved to UTC in the given zone. `src/mcp/dolt-store.test.ts` proves it
+against the disposable Dolt on 3399 (its own database per run), including a
+write made by one spawned stdio server being read by the next.
 
-Consequence: state does not survive a call, so a second command cannot see the
-first one's result even if the first one worked.
+Limits that remain: `query_period` matches on the UTC date of the start and
+ignores `grain`; a commitment is named by its summary (at most 64 characters),
+and two items starting at the same instant in one grain replace each other
+(`uq_period_grain_start`). `link_external` and `unlink_external` still only
+validate and echo; they record no binding. The default port is 3399, never the
+fleet server on 3307.
 
 ### L2: `list_changes` failed on every input (fixed)
 
@@ -226,7 +237,7 @@ string. It now parses against the declared `ListChanges` object schema, and
 `src/mcp/list-changes.test.ts` calls the tool through a real MCP client and
 server pair (in-memory transport), and both of its read tests fail without the
 fix. Over stdio, `pnpm run mcp:call -- list_changes '{}'` is expected to return
-`[]` rather than "Invalid input", because the store is still empty (L1).
+`[]` on an empty store, rather than "Invalid input".
 
 ### L3: the apply step exists, but has no real provider
 
@@ -292,37 +303,30 @@ refresh request as written, the real token response and error shapes beyond
 401, and the OAuth consent flow itself. No mint-from-scratch flow exists; a human
 obtains the first refresh token and supplies it.
 
-### L5: running the test suite dirties tracked files
+### L5: running the test suite no longer dirties tracked files (fixed)
 
-`src/domain/rfc5546/emit-artifact.test.ts` rewrites
-`evidence/stage-02/artifact.json` in a different format from the committed copy.
-After `pnpm run test -- --run`:
-```
- M evidence/stage-02/artifact.json
-```
-and `pnpm run lint` then exits 1 on that file. Restore it with
-`git checkout -- evidence/stage-02/artifact.json` before committing. Other suites
-have left `.dolt/noms/journal.idx` modified the same way.
+`emit-artifact.test.ts` used to rewrite `evidence/stage-02/artifact.json`. It now
+writes to a scratch directory and fails if the result differs from the committed
+copy, so drift is caught rather than overwritten. To regenerate the committed
+evidence on purpose: `pnpm run evidence:emit`.
+`src/mcp/test-hygiene.test.ts` runs that suite and asserts `git status` is
+unchanged. The tracked `.dolt/` files at the repo root were not modified by any
+run on this branch, but no test guards them.
 
-### L6: scoped test commands do not narrow
+### L6: scoped test commands now narrow (fixed)
 
-`pnpm run test -- src/adapters/caldav --run` runs all 104 tests, not the 18 in
-that directory. pnpm forwards the `--`, and vitest then treats the filter as
-free text:
-```
-$ npx vitest -- src/adapters/caldav --run   ->  Test Files 10, Tests 104
-$ npx vitest   src/adapters/caldav --run     ->  Test Files  1, Tests  18
-```
-This is recorded in `evidence/stage-10/skips.md`. It makes every scoped stage
-gate in `canon-profile.json` a whole-suite run: stricter than intended, not
-looser. `npx vitest <path> --run` is the form that narrows.
+`pnpm run test` is `scripts/vitest.mjs`, which drops the literal `--` pnpm
+forwards and passes the rest to vitest, so `pnpm run test -- src/adapters/caldav --run`
+runs only that directory (2 files, 38 tests) instead of the whole suite. The
+stage gates in `canon-profile.json` are therefore real scoped runs now.
+`src/mcp/test-hygiene.test.ts` asserts a scoped run executes one file.
 
 ## More tests worth running
 
 All six were run on this branch and all six passed.
 
 ```sh
-pnpm run test -- --run                              # 141 tests, 13 files
+pnpm run test -- --run                              # 149 tests, 15 files
 pnpm run db:verify                                  # 6 tables, 51 columns, 15 indexes
 pnpm run sync:measure --scenario realistic --assert-under 250
 pnpm run sync:replay fixtures/replay-a --rounds 5

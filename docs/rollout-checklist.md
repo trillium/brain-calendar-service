@@ -41,8 +41,8 @@ real run tests the provider and not the plumbing.
    leave uncommitted rows in the disposable store, so the drill failed with
    `uncommitted rows in calendar_conflict` when run after them. Reset the disposable
    store (`call dolt_reset('--hard')` on 3399 only), then run the drill alone.
-2. The test run rewrites `evidence/stage-02/artifact.json`. Run
-   `git checkout -- evidence/` before committing.
+2. The test run no longer modifies tracked files. Regenerate evidence on purpose
+   with `pnpm run evidence:emit`.
 3. Never point `CALENDAR_DB_PORT` at 3307 for any of the above.
 
 ## Next captain actions (in order)

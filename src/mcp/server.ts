@@ -9,7 +9,7 @@ export const buildServer = (store: Store = newStore()) => {
   for (const tool of TOOLS) {
     // The four-argument form is the one that binds arguments; see tools.ts.
     server.tool(tool.name, tool.description, tool.schema.shape, async (args: unknown) =>
-      structured(dispatch(store, tool.name, args)),
+      structured(await dispatch(store, tool.name, args)),
     );
   }
 

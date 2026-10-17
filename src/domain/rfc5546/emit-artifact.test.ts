@@ -9,7 +9,8 @@
 // This is a test file on purpose: it runs as part of the stage's exit command,
 // which is what makes "the exit command emits the artifact" literally true.
 
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -19,7 +20,14 @@ import { resolve as resolvePair } from "./resolve.js";
 import { canonical, type Occurrence } from "./types.js";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
-const OUT = resolve(ROOT, "evidence", "stage-02");
+const COMMITTED = resolve(ROOT, "evidence", "stage-02");
+
+// A test run must not modify tracked files. The artifact is written into the
+// committed directory only when someone asks (`pnpm run evidence:emit`);
+// otherwise it goes to a scratch directory and is compared with the committed
+// copy, so drift still fails the run instead of being silently overwritten.
+const EMIT = process.env.EMIT_EVIDENCE === "1";
+const OUT = EMIT ? COMMITTED : mkdtempSync(resolve(tmpdir(), "stage-02-"));
 
 const SWEEP = pairs(20260301, 2000);
 
@@ -103,6 +111,14 @@ ${[...reasons.entries()]
     };
     expect(existsSync(resolve(OUT, "decision-table.md"))).toBe(true);
     writeFileSync(resolve(OUT, "artifact.json"), `${JSON.stringify(artifact, null, 2)}\n`);
+
+    if (!EMIT) {
+      const read = (dir: string, file: string) => readFileSync(resolve(dir, file), "utf8");
+      expect(JSON.parse(read(OUT, "artifact.json"))).toEqual(
+        JSON.parse(read(COMMITTED, "artifact.json")),
+      );
+      expect(read(OUT, "decision-table.md")).toBe(read(COMMITTED, "decision-table.md"));
+    }
   });
 
   it("keeps a loser payload verbatim so a human can undo a resolution", () => {
