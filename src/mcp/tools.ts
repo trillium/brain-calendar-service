@@ -98,10 +98,13 @@ const unlinkExternal = (_store: Store, raw: unknown) => {
   return { unlinked: true, ...input };
 };
 
+const ListChanges = z.object({ beadId: z.string().min(1).optional() });
+
 const listChanges = (store: Store, raw: unknown) => {
-  const input = MoveCommitment.shape.beadId.or(z.string().min(1)).parse(raw);
-  void input;
-  return store.periods.map((p) => ({ beadId: p.summary, startUtc: p.startUtc, endUtc: p.endUtc }));
+  const input = ListChanges.parse(raw);
+  return store.periods
+    .filter((p) => input.beadId === undefined || p.summary === input.beadId)
+    .map((p) => ({ beadId: p.summary, startUtc: p.startUtc, endUtc: p.endUtc }));
 };
 
 const listQuarantined = (store: Store) => ({
@@ -110,7 +113,6 @@ const listQuarantined = (store: Store) => ({
   note: "Quarantine has no exit path; resolving one is a human decision.",
 });
 
-const ListChanges = z.object({ beadId: z.string().min(1).optional() });
 const Nothing = z.object({});
 
 export const TOOLS = [

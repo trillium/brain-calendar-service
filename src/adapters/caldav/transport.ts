@@ -16,6 +16,8 @@
 //   2. Every method the loop may call is named, so the deny-by-default policy
 //      has something concrete to check against.
 
+import type { AuthorizationSource } from "./auth.js";
+
 type CalDavMethod = "PROPFIND" | "REPORT" | "PUT" | "DELETE" | "GET" | "HEAD";
 
 export interface RequestRecord {
@@ -63,17 +65,34 @@ const INVALID_SYNC_TOKEN_BODY = /valid-sync-token/i;
 export const fetchTransport = (
   baseUrl: string,
   headers: Record<string, string> = {},
+  auth?: AuthorizationSource,
 ): Transport => {
   const log: RequestRecord[] = [];
+  const send = async (
+    method: CalDavMethod,
+    url: string,
+    body: string | undefined,
+    extra: Record<string, string>,
+    forceRefresh: boolean,
+  ): Promise<Response> => {
+    // The auth header is applied last so a stale static one can never win.
+    const authHeader: Record<string, string> = auth
+      ? { Authorization: await auth.authorization(forceRefresh) }
+      : {};
+    return fetch(url.startsWith("http") ? url : `${baseUrl}${url}`, {
+      method,
+      body,
+      headers: { ...headers, ...extra, ...authHeader },
+    });
+  };
   return {
     log,
     async request(method, url, body, extra = {}) {
       const started = Date.now();
-      const res = await fetch(url.startsWith("http") ? url : `${baseUrl}${url}`, {
-        method,
-        body,
-        headers: { ...headers, ...extra },
-      });
+      let res = await send(method, url, body, extra, false);
+      // 401 means rejected BEFORE processing, so one retry with a fresh token is
+      // safe even for PUT. 403 is NOT retried here: it is the sync-token signal.
+      if (res.status === 401 && auth) res = await send(method, url, body, extra, true);
       const text = await res.text();
       const ms = Date.now() - started;
       log.push({ method, url, status: res.status, bytes: text.length, ms });

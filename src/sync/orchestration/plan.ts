@@ -23,16 +23,23 @@ import type { Occurrence } from "../../domain/rfc5546/types.js";
 import { detectChanges } from "../changedetection/plan.js";
 import { allow, assertPermitted, type SyncPolicy } from "../loop/policy.js";
 
-interface PlanPush {
+export interface PlanPush {
   beadId: string;
   externalUid: string;
   reason: string;
+  idempotencyKey?: string;
 }
 
-interface PlanPull {
+export interface PlanPull {
   beadId: string;
   externalUid: string;
   reason: string;
+  /** The remote side as observed, so applying a pull needs no second fetch. */
+  payload?: Readonly<Record<string, unknown>>;
+  etag?: string | null;
+  sequence?: number;
+  dtstamp?: string | null;
+  idempotencyKey?: string;
 }
 
 interface Quarantine {
@@ -48,7 +55,7 @@ interface Observations {
   gitHeadAfter: string | null;
 }
 
-interface SyncPlan {
+export interface SyncPlan {
   calendarId: string;
   dryRun: boolean;
   cursorBefore: string | null;
@@ -74,14 +81,24 @@ interface CycleInput {
   readonly remoteChanges: readonly Occurrence[];
   readonly providerCalls: readonly { method: string }[];
   readonly gitHead: () => string | null;
+  /** Defaults to true: planning never writes. The live path says so explicitly. */
+  readonly dryRun?: boolean;
 }
+
+/**
+ * The policy a cycle runs under, for planning and for applying alike. INSERT and
+ * UPDATE only: DELETE is absent on purpose, so an external delete is refused by
+ * default and stays a human decision.
+ */
+export const cyclePolicy = (provider: string, calendarId: string): SyncPolicy =>
+  allow(provider, [
+    [calendarId, "INSERT"],
+    [calendarId, "UPDATE"],
+  ]);
 
 /** Build the plan. Writes nothing, including in dry-run. */
 export const buildSyncPlan = async (input: CycleInput): Promise<SyncPlan> => {
-  const policy: SyncPolicy = allow(input.provider, [
-    [input.calendarId, "INSERT"],
-    [input.calendarId, "UPDATE"],
-  ]);
+  const policy = cyclePolicy(input.provider, input.calendarId);
 
   const [cursorRows] = await input.conn.query<RowDataPacket[]>(
     "SELECT last_synced_commit_hash FROM calendar_sync_cursor WHERE source_database = ? AND calendar_id = ?",
@@ -123,6 +140,10 @@ export const buildSyncPlan = async (input: CycleInput): Promise<SyncPlan> => {
         beadId: "",
         externalUid: remote.uid,
         reason: decision.reason,
+        payload: remote.payload,
+        etag: remote.etag,
+        sequence: remote.sequence,
+        dtstamp: remote.dtstamp,
       });
     }
   }
@@ -134,7 +155,7 @@ export const buildSyncPlan = async (input: CycleInput): Promise<SyncPlan> => {
 
   return {
     calendarId: input.calendarId,
-    dryRun: true,
+    dryRun: input.dryRun ?? true,
     cursorBefore,
     cursorAfter: cursorBefore,
     push,

@@ -9,8 +9,12 @@
 // emits carries the OBSERVATIONS that prove it, not a promise that it did.
 
 import { execSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { createConnection } from "mysql2/promise";
-import { buildSyncPlan } from "../src/sync/orchestration/plan.ts";
+import { applyPlan } from "../src/sync/apply/apply.ts";
+import { configuredProvider } from "../src/sync/apply/provider.ts";
+import type { ApplyResult } from "../src/sync/apply/types.ts";
+import { buildSyncPlan, cyclePolicy } from "../src/sync/orchestration/plan.ts";
 
 const args = process.argv.slice(2);
 const flag = (n: string) => args.includes(`--${n}`);
@@ -72,6 +76,17 @@ try {
     }
   }
 
+  const temporalTables = ["calendar_period", "calendar_binding"];
+  const countRows = async (): Promise<Record<string, number>> => {
+    const counts: Record<string, number> = {};
+    for (const table of temporalTables) {
+      const [rows] = await conn.query(`SELECT COUNT(*) AS n FROM \`${table}\``);
+      counts[table] = Number(rows[0].n);
+    }
+    return counts;
+  };
+  const rowsBefore = await countRows();
+
   const plan = await buildSyncPlan({
     conn,
     calendarId: String(calendarIdNumber),
@@ -79,16 +94,45 @@ try {
     remoteChanges: [],
     providerCalls: [{ method: "PROPFIND" }, { method: "REPORT" }],
     gitHead,
+    dryRun,
   });
 
   // Every planned write carries its idempotency key, so a replay is safe.
   plan.push = plan.push.map((p, i) => ({ ...p, idempotencyKey: `${p.beadId}:${i}` }));
   plan.pull = plan.pull.map((p, i) => ({ ...p, idempotencyKey: `${p.externalUid}:${i}` }));
 
+  // The apply step. Not reached on a dry-run, which is what keeps a dry-run inert.
+  let applied: ApplyResult | null = null;
+  const work = plan.push.length + plan.pull.length;
+  if (!dryRun && work > 0) {
+    const provider = configuredProvider();
+    if (provider === null) {
+      // Refuse BEFORE any write rather than apply against a stand-in and record
+      // bindings for events that do not exist anywhere.
+      console.error(
+        `sync:once: ${work} change(s) to apply, but no CalendarProvider is configured. ` +
+          "Nothing was written. See docs/running-by-hand.md (L3).",
+      );
+      process.exit(1);
+    }
+    applied = await applyPlan(
+      {
+        conn,
+        provider,
+        policy: cyclePolicy("google", String(calendarIdNumber)),
+        calendarId: String(calendarIdNumber),
+        now: () => new Date().toISOString().slice(0, 19).replace("T", " "),
+        mintToken: randomUUID,
+      },
+      plan,
+    );
+    plan.cursorAfter = applied.cursorAdvancedTo ?? plan.cursorBefore;
+  }
+
   // OBSERVED row deltas, read back from the store rather than asserted.
-  for (const table of Object.keys(plan.observations.rowDeltas)) {
-    const [rows] = await conn.query(`SELECT COUNT(*) AS n FROM \`${table}\``);
-    plan.observations.rowDeltas[table] = Number(rows[0].n) === 0 ? 0 : 0;
+  const rowsAfter = await countRows();
+  for (const table of temporalTables) {
+    plan.observations.rowDeltas[table] = rowsAfter[table] - rowsBefore[table];
   }
   plan.observations.gitHeadAfter = gitHead();
 
@@ -99,6 +143,13 @@ try {
       `sync:once calendar=${calendarIdNumber} dryRun=${dryRun} push=${plan.push.length} ` +
         `pull=${plan.pull.length} conflicts_quarantined=${plan.conflictsQuarantined}`,
     );
+  }
+
+  const unfinished = applied?.outcomes.filter((o) => o.kind === "failed" || o.kind === "refused");
+  if (unfinished && unfinished.length > 0) {
+    console.error(`sync:once: ${unfinished.length} entr(ies) not applied; cursor held back`);
+    console.error(JSON.stringify(unfinished, null, 2));
+    process.exit(1);
   }
 
   if (!dryRun && plan.conflictsQuarantined > 0) {

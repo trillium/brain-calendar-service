@@ -117,8 +117,9 @@ bash scripts/start-local-dolt.sh stop
 
 ## The minimal real calendar operation
 
-As of this commit there is no operation that creates, moves, or deletes an event
-on any calendar. That is [L3](#l3-there-is-no-write-path-to-a-calendar).
+As of this commit no operation creates, moves, or deletes an event on a real
+calendar. The apply step exists ([L3](#l3-the-apply-step-exists-but-has-no-real-provider)),
+but the only `CalendarProvider` it has ever run against is an in-memory fake.
 
 The closest thing that genuinely happens today, and the one worth running first,
 is step 6 above: it registers a calendar with the store by writing its sync
@@ -177,17 +178,29 @@ client does.
 | The calendar id to point at | **human-supplied** | not done |
 | Permission to write to that calendar | **human-supplied** | not done |
 
-The second half of that table is not a credentials problem. No code in `src/` or
-`scripts/` reads a provider token: the only environment variables read anywhere
-are `CALENDAR_DB_HOST`, `CALENDAR_DB_PORT`, `CALENDAR_DB_NAME`,
-`CALENDAR_DB_USER`, `CALENDAR_DB_PASSWORD`, and `CANON_ROOT`. The CalDAV
-transport takes an `Authorization` header as a parameter, and nothing in this
-repo ever supplies one. See [L4](#l4-there-is-no-credential-plumbing).
+The second half of that table is not a credentials problem. The token plumbing
+now exists (`src/adapters/caldav/auth.ts`, see
+[L4](#l4-credential-plumbing-exists-and-has-never-met-a-real-account)) and reads:
+
+| Variable | Meaning |
+|---|---|
+| `CALENDAR_OAUTH_CLIENT_ID` | OAuth client id |
+| `CALENDAR_OAUTH_CLIENT_SECRET` | OAuth client secret |
+| `CALENDAR_OAUTH_REFRESH_TOKEN` | the long-lived refresh token |
+| `CALENDAR_OAUTH_TOKEN_URL` | optional; defaults to Google's https token endpoint |
+| `CALENDAR_OAUTH_FILE` | optional path to a JSON file holding the same fields |
+
+The file must be **outside the repository** and mode **0600**, or loading refuses.
+A file is also where a refreshed access token (and a rotated refresh token) is
+saved; with environment variables alone, tokens live in memory only. Do not put
+any of these in the repo. Nothing in `sync:once` calls this yet, because there is
+no provider for it to authorise.
 
 ## What this does not prove
 
-Found by running it, not by reading the tests. Each of these is invisible to the
-104 green tests.
+Found by running it, not by reading the tests. Each of these was invisible to the
+104 green tests that existed when they were found. L2, L3 and L4 are now addressed
+below; L1, L5 and L6 are not.
 
 ### L1: no tool reads or writes the database
 
@@ -205,34 +218,79 @@ different tool. Its closing line claims a read-after-write; there was no write.
 Consequence: state does not survive a call, so a second command cannot see the
 first one's result even if the first one worked.
 
-### L2: `list_changes` fails on every input
+### L2: `list_changes` failed on every input (fixed)
 
-```
-$ pnpm run mcp:call -- list_changes '{}'
-... "message": "Invalid input"     (exit 1)
+The handler parsed the whole arguments object against a schema for a single
+string. It now parses against the declared `ListChanges` object schema, and
+`beadId`, which the schema already declared optional, now narrows the result.
+`src/mcp/list-changes.test.ts` calls the tool through a real MCP client and
+server pair (in-memory transport), and both of its read tests fail without the
+fix. Over stdio, `pnpm run mcp:call -- list_changes '{}'` is expected to return
+`[]` rather than "Invalid input", because the store is still empty (L1).
 
-$ pnpm run mcp:call -- list_changes '{"beadId":"standup"}'
-... "message": "Invalid input"     (exit 1)
-```
-The handler parses the whole arguments object against a schema for a single
-string. Any object fails. The published schema is correct and matches the other
-six tools; only the handler is wrong. One line fixes it - parse `raw` against
-`ListChanges`, the object schema already declared three lines above. Not fixed
-here, because this task was to use the service, not change it.
+### L3: the apply step exists, but has no real provider
 
-### L3: there is no write path to a calendar
+`sync:once` without `--dry-run` now applies the plan (`src/sync/apply/`):
 
-`buildSyncPlan` returns `dryRun: true` unconditionally, and `sync:once` without
-`--dry-run` only bootstraps the cursor before building the same plan. It never
-applies `push` or `pull`. Running the live path against a calendar that had
-changes would report a correct plan and write nothing, which is exactly the
-outcome that reads like success.
+- A push of a `calendar_period` row becomes an INSERT if its bead has no binding
+  and an UPDATE if it has one. INSERT is keyed on a uid derived from the bead, so
+  a replay after a crash returns the existing event instead of duplicating it. A
+  new binding gets an ownership token.
+- A pull writes the remote times and sequence onto the bound bead, in Dolt only.
+  An event that no bead is bound to is skipped, not invented.
+- Both are checked against the `SyncPolicy`. `sync:once` runs under INSERT and
+  UPDATE only; anything else is `refused` and the provider is not called.
+- A local deletion is **never** carried out. It is quarantined in
+  `calendar_conflict` as `local_delete_needs_human`, once, and the provider
+  interface has no delete method to call. This holds even if a policy permits
+  DELETE. Destructive cleanup of external events is still a human decision.
+- Local writes are committed to Dolt, and the cursor advances to that commit only
+  if every entry was applied or skipped. A `failed` or `refused` entry holds the
+  cursor back so it is planned again. Apply refuses to start over uncommitted
+  edits to its tables, because committing them would advance the cursor past
+  changes that were never pushed.
+- Reported row deltas are now measured (after minus before) rather than the
+  constant 0 the script used to print.
 
-### L4: there is no credential plumbing
+`src/sync/apply/apply.test.ts` proves this against a real disposable Dolt on
+3399 (each run builds and drops its own database) and an **in-memory fake
+provider**. Convergence is asserted: planning again after a clean apply finds
+nothing to do.
 
-See the table above. A real provider run needs code written first: mint and
-refresh a token, persist it, pass it as the transport's `Authorization` header,
-and handle the 403 refresh the transport already models.
+**What is still missing.** `configuredProvider()` returns `null`: no
+`CalendarProvider` for a real calendar is written. So `sync:once` with changes to
+apply exits 1 with "no CalendarProvider is configured. Nothing was written",
+before any write. That is deliberate. Applying to a stand-in would record
+bindings and ownership tokens for events that exist nowhere. A clean calendar
+(nothing to apply) still succeeds. **UNVERIFIED:** everything about how a real
+CalDAV or Google endpoint behaves under INSERT/UPDATE (ETag and `If-Match`
+semantics, uid collisions, rate limits). The pull path is exercised only with a
+hand-built plan, because `buildSyncPlan` compares a remote against a copy of
+itself and so currently never plans a pull from `sync:once`'s own inputs, which
+is also why `sync:once` passes it no remote changes.
+
+### L4: credential plumbing exists and has never met a real account
+
+`src/adapters/caldav/auth.ts` loads the client id, secret and refresh token from
+the environment variables above or a 0600 file outside the repo, exchanges the
+refresh token for an access token, caches it with a 60 s expiry skew, shares one
+refresh between concurrent callers, and persists the refreshed token atomically
+at 0600. `fetchTransport` takes an optional authorization source, sends
+`Authorization: Bearer ...`, and on a 401 refreshes once and retries once. A 403
+is not retried; it remains the sync-token signal. A revoked refresh token
+(`invalid_grant`) raises `TokenRefreshError` with `reconsentRequired: true`.
+Errors name the missing variable and never print a secret or a response body. A
+token endpoint that is plain http to a non-loopback host is refused.
+
+`src/adapters/caldav/auth.test.ts` runs it against a fake token endpoint and a
+fake resource server on loopback. Every credential in it is an invented
+placeholder.
+
+**UNVERIFIED, all of it against a real account:** that Google accepts this
+refresh request as written, the real token response and error shapes beyond
+`invalid_grant`, refresh-token rotation, how a real CalDAV endpoint answers a
+401, and the OAuth consent flow itself. No mint-from-scratch flow exists; a human
+obtains the first refresh token and supplies it.
 
 ### L5: running the test suite dirties tracked files
 
@@ -264,7 +322,7 @@ looser. `npx vitest <path> --run` is the form that narrows.
 All six were run on this branch and all six passed.
 
 ```sh
-pnpm run test -- --run                              # 104 tests, 10 files
+pnpm run test -- --run                              # 141 tests, 13 files
 pnpm run db:verify                                  # 6 tables, 51 columns, 15 indexes
 pnpm run sync:measure --scenario realistic --assert-under 250
 pnpm run sync:replay fixtures/replay-a --rounds 5
@@ -298,17 +356,18 @@ pnpm run sync:soak-report --since 7d     # exits 1
 sync:soak-report FAILED: no soak report exists.
 ```
 That non-zero exit is correct and should stay that way until a real soak exists.
-A soak needs the credential work in L4 and an apply path in L3 before it can be
-run at all; supplying credentials alone will not make this command pass.
+A soak needs a real `CalendarProvider` (L3) as well as real credentials (L4); the
+plumbing for both now exists, but supplying credentials alone will not make this
+command pass.
 
 ## To finish this
 
 In order, and none of them are a task for this document:
 
-1. Fix `list_changes` (L2). One line.
-2. Give the tools a real store: read `calendar_period` from Dolt instead of an
+1. Give the tools a real store: read `calendar_period` from Dolt instead of an
    empty in-process array, and write through it (L1).
-3. Build the apply path so `sync:once` without `--dry-run` does what its name
-   says (L3).
-4. Add token mint, refresh, and storage, and pass the header (L4).
-5. Only then point it at a calendar a human has named, and soak it.
+2. Write a real `CalendarProvider` (CalDAV `PUT` with `If-None-Match: *` for
+   create and `If-Match` for update, over `fetchTransport` with the token source)
+   and return it from `configuredProvider()` (L3).
+3. Supply real credentials and run it against a calendar you do not mind
+   changing, which turns every UNVERIFIED above into a finding (L3, L4).
