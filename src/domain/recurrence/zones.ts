@@ -37,7 +37,8 @@ const zoneOrThrow = (zone: string) => {
 };
 
 const HORIZON_START = Date.parse(`${HORIZON.start}-01-01T00:00:00Z`);
-const HORIZON_END = Date.parse(`${HORIZON.end + 1}-01-01T00:00:00Z`);
+/** First instant OUTSIDE the pinned table; an open-ended expansion stops here. */
+export const HORIZON_END = Date.parse(`${HORIZON.end + 1}-01-01T00:00:00Z`);
 
 /** UTC offset in seconds for `zone` at `epochMs`. Binary search over transitions. */
 export const offsetSecondsAt = (zone: string, epochMs: number): number => {
