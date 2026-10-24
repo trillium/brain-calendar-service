@@ -20,7 +20,7 @@ brackets refer to the guardrail review brain-ujyse.
 | `testing` | **partial** | Vitest applies and is the primary gate. React Testing Library, jest-dom, Playwright and axe-core are NOT APPLICABLE (headless service) and are deliberately not installed, which would trip Canon's own unused-deps rule. Node-environment project replaces Canon's jsdom baseline; see conflict C5. |
 | `ci` | **partial** | Four parallel fast jobs retained; the build job is retargeted per conflict C2 because there is no next build to run. accessibility.yml and e2e.yml are recorded not-applicable rather than created empty. |
 | `migration-allocator` | **partial** | Reservation discipline retained; directory re-pointed from supabase/migrations to migrations/ per conflict C4, which the module's own Conflicts clause sanctions. |
-| `auth` | **not applicable** | Conflict C3. The service authenticates to external calendar providers (Google OAuth, CalDAV), not to end users; there is no login page and no session proxy. |
+| `auth` | **not applicable** | Conflict C3. The service delegates all provider authentication to the gog CLI (Google OAuth lives there), and has no end users; there is no login page and no session proxy. |
 | `database` | **not applicable** | Conflict C1. Canon mandates Supabase Postgres server-side; the approved architecture makes Dolt/Beads authoritative and explicitly rejected a second source of truth. Replaced by Dolt schema migrations plus a generated Dolt row-type file (pnpm run gen:dolt-types). At S1 the migration allocator was re-pointed, the schema declared in src/adapters/dolt/schema.mjs, and db:verify + a 10-test round-trip suite run against a real (disposable) Dolt server. |
 | `styling` | **not applicable** | No UI in the service. Tailwind, shadcn, CVA and lucide apply in full to a future operator UI, which is a separate project. |
 | `theming` | **not applicable** | Same as styling. next-themes needs a React tree this service does not have. |
@@ -57,7 +57,7 @@ Rung 1 = structure (cannot be expressed wrongly). 2 = static (a check fails).
 | S3 | Recurrence with exceptions, and the timezone build step | `pnpm run build:timezones && pnpm run test -- src/domain/recurrence --run` |
 | S4 | Bidirectional change detection over Dolt history and diff | `pnpm run test -- src/sync/changedetection --run && pnpm run sync:replay fixtures/replay-a --rounds 5` |
 | S5 | Loop and duplicate prevention, proven by convergence | `pnpm run sync:converge --scenario loop --rounds 5` |
-| S6 | External provider adapters, starting with Google over CalDAV | `pnpm run test -- src/adapters/caldav --run && pnpm run sync:measure --scenario realistic --assert-under <budget>` |
+| S6 | External provider adapters, starting with Google through the gog CLI | `pnpm run test -- src/adapters/gog --run && pnpm run sync:measure --scenario realistic --assert-under <budget>` |
 | S7 | Sync orchestration and quarantine | `pnpm run sync:once --calendar <id> --dry-run --json | tee /tmp/plan.json && pnpm run sync:verify-plan /tmp/plan.json` |
 | S8 | The TypeScript MCP interface | `pnpm run test -- src/mcp --run && pnpm run mcp:smoke` |
 | S9 | Repository-health convergence and unattended-work readiness | `pnpm run size:check && pnpm run health && pnpm run type-check && pnpm run lint && pnpm run test -- --run` |

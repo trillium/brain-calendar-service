@@ -28,5 +28,11 @@
     "cyclomatic": 10,
     "cognitive": 15
   },
-  "entry": ["migrations/**", "scripts/*.mjs", "scripts/*.sh", "src/mcp/entry.ts"]
+  "entry": [
+    "migrations/**",
+    "scripts/*.mjs",
+    "scripts/*.sh",
+    "src/mcp/entry.ts",
+    "fixtures/gog/fake-gog.mjs"
+  ]
 }
