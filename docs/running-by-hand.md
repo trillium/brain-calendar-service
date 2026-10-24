@@ -34,7 +34,8 @@ Already up to date
 Done in 561ms using pnpm v10.33.0
 ```
 
-**2. Prove the MCP server speaks the protocol.** No database, no credentials.
+**2. Prove the MCP server speaks the protocol.** No credentials. It needs the Dolt
+server from step 3 running; it creates and drops its own throwaway database.
 ```sh
 pnpm run mcp:smoke
 ```
@@ -45,7 +46,8 @@ mcp:smoke
 mcp:smoke PASSED: initialize, tools/list, a read tool, a write tool, and a read-after-write over real stdio
 ```
 This spawns the server as a child process and drives it as a real client does.
-Treat the last sentence as unproven; see [L1](#l1-no-tool-reads-or-writes-the-database).
+The write is read back through two different tools, against a real Dolt database
+(see [L1](#l1-no-tool-reads-or-writes-the-database)).
 
 **3. Start this project's own Dolt server.** It is disposable and on port 3399,
 not the fleet-shared server on 3307.
@@ -145,12 +147,15 @@ unlink_external    Remove a link to an external event.  args: [beadId, calendarI
 list_changes       Report changes made through a planning interface.  args: []
 list_quarantined   Surface quarantined conflicts.  args: []
 
-{"date":"2026-04-01","zone":"America/New_York","firstOccurrenceUtc":"2026-04-01T13:00:00.000Z","items":1}
+{"proposed":true,"date":"2026-04-01","zone":"America/New_York","firstOccurrenceUtc":"2026-04-01T13:00:00.000Z","items":1}
 
-{"grain":"day","zone":"America/New_York","periods":[]}
+{"grain":"day","zone":"America/New_York","periods":[{"grain":"day","startUtc":"2026-04-01T13:00:00Z","endUtc":"2026-04-01T13:15:00Z","summary":"standup"}]}
 ```
-The `propose_day` line is real work: 09:00 in New York on 1 April 2026 resolved to
-13:00Z, correct for EDT. The `query_period` line right below it is the problem.
+09:00 in New York on 1 April 2026 resolved to 13:00Z, correct for EDT, and the
+`query_period` call in a second process read it back from Dolt. These two calls
+ran against a throwaway database; run against the default one, `mcp:call` writes
+to `brain_calendar_service` (set `CALENDAR_DB_NAME` to point it elsewhere), and
+each write is a Dolt commit.
 
 ## Using it from a voice assistant
 
@@ -202,20 +207,11 @@ runs each step in a fresh server process to prove state survives the process.
 The original finding, kept for the record: the tools read and write an in-process
 `Store` that starts empty, so `query_period` always returned `"periods":[]`.
 
-### L2: `list_changes` fails on every input
+### L2: `list_changes` fails on every input (RESOLVED)
 
-```
-$ pnpm run mcp:call -- list_changes '{}'
-... "message": "Invalid input"     (exit 1)
-
-$ pnpm run mcp:call -- list_changes '{"beadId":"standup"}'
-... "message": "Invalid input"     (exit 1)
-```
-The handler parses the whole arguments object against a schema for a single
-string. Any object fails. The published schema is correct and matches the other
-six tools; only the handler is wrong. One line fixes it - parse `raw` against
-`ListChanges`, the object schema already declared three lines above. Not fixed
-here, because this task was to use the service, not change it.
+Fixed in `4edba70`: the handler now parses its arguments against the object
+schema. Original finding: any object failed with `Invalid input`, because the
+handler parsed the whole arguments object against a schema for a single string.
 
 ### L3: there is no write path to a calendar
 
@@ -302,9 +298,8 @@ run at all; supplying credentials alone will not make this command pass.
 
 In order, and none of them are a task for this document:
 
-1. Fix `list_changes` (L2). One line.
-2. Give the tools a real store: read `calendar_period` from Dolt instead of an
-   empty in-process array, and write through it (L1).
+1. ~~Fix `list_changes` (L2).~~ Done.
+2. ~~Give the tools a real store (L1).~~ Done: the tools read and write Dolt.
 3. Build the apply path so `sync:once` without `--dry-run` does what its name
    says (L3).
 4. Add token mint, refresh, and storage, and pass the header (L4).
