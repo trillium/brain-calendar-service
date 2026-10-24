@@ -161,6 +161,19 @@ describe("periods", () => {
     expect(await store.listPeriods()).toHaveLength(2);
   });
 
+  it("returns a typed refusal when two items start at the same time", async () => {
+    const out = await dispatch(store, "propose_day", {
+      zone: "UTC",
+      date: "2026-04-01",
+      items: [
+        { summary: "a", startLocal: "2026-04-01T09:00:00", minutes: 30 },
+        { summary: "b", startLocal: "2026-04-01T09:00:00", minutes: 30 },
+      ],
+    });
+    expect(out).toMatchObject({ proposed: false });
+    expect(await store.listPeriods()).toHaveLength(0);
+  });
+
   it("proposes the same day twice without duplicating it", async () => {
     await standup();
     await standup();
@@ -169,7 +182,7 @@ describe("periods", () => {
 
   it("proposes all-or-nothing when one item clashes", async () => {
     await standup();
-    const clash = dispatch(store, "propose_day", {
+    const clash = await dispatch(store, "propose_day", {
       zone: "UTC",
       date: "2026-04-01",
       items: [
@@ -177,7 +190,10 @@ describe("periods", () => {
         { summary: "intruder", startLocal: "2026-04-01T09:00:00", minutes: 30 },
       ],
     });
-    await expect(clash).rejects.toThrow(/refusing to overwrite/);
+    expect(clash).toMatchObject({
+      proposed: false,
+      reason: expect.stringContaining("refusing to overwrite"),
+    });
     expect(await store.listPeriods("fresh")).toHaveLength(0);
   });
 
@@ -225,7 +241,7 @@ describe("links", () => {
 
   it("rejects a calendar id that is not numeric", async () => {
     await expect(dispatch(store, "link_external", { ...link, calendarId: "work" })).rejects.toThrow(
-      /calendar id/,
+      /calendarId must be/,
     );
   });
 });
@@ -291,6 +307,10 @@ describe("input bounds match the store's column widths", () => {
     for (const bad of [
       { ...ok, beadId: long(65) },
       { ...ok, calendarId: long(25) },
+      { ...ok, calendarId: "primary" },
+      { ...ok, calendarId: "cal-abc" },
+      { ...ok, calendarId: "cal-0" },
+      { ...ok, calendarId: "cal-99999999999999999999" },
       { ...ok, externalUid: long(513) },
     ]) {
       await expect(dispatch(store, "link_external", bad)).rejects.toThrow();
@@ -299,6 +319,7 @@ describe("input bounds match the store's column widths", () => {
     for (const bad of [
       { beadId: long(65), calendarId: "cal-1" },
       { beadId: "b", calendarId: long(25) },
+      { beadId: "b", calendarId: "primary" },
     ]) {
       await expect(dispatch(store, "unlink_external", bad)).rejects.toThrow();
     }

@@ -28,7 +28,10 @@ const windowEnd = (grain: "day" | "week" | "month", from: Date): string => {
 // typed validation refusal at the boundary rather than a driver error mid-write.
 // A commitment's summary is stored in calendar_period.linked_bead_id.
 const MAX_BEAD_ID = 64;
-const MAX_CALENDAR_ID = 24;
+// "cal-<n>" or "<n>": n is a BIGINT calendar_id, so at most 18 digits keeps it in range.
+const CALENDAR_ID = z
+  .string()
+  .regex(/^(cal-)?[1-9][0-9]{0,17}$/, 'calendarId must be a positive integer or "cal-<n>"');
 const MAX_EXTERNAL_UID = 512;
 
 const QueryPeriod = z.object({
@@ -58,13 +61,13 @@ const MoveCommitment = z.object({
 
 const LinkExternal = z.object({
   beadId: z.string().min(1).max(MAX_BEAD_ID),
-  calendarId: z.string().min(1).max(MAX_CALENDAR_ID),
+  calendarId: CALENDAR_ID,
   externalUid: z.string().min(1).max(MAX_EXTERNAL_UID),
 });
 
 const UnlinkExternal = z.object({
   beadId: z.string().min(1).max(MAX_BEAD_ID),
-  calendarId: z.string().min(1).max(MAX_CALENDAR_ID),
+  calendarId: CALENDAR_ID,
 });
 
 export const queryPeriod = async (store: Store, raw: unknown) => {
@@ -101,8 +104,16 @@ const proposeDay = async (store: Store, raw: unknown) => {
       summary: item.summary,
     });
   }
-  await store.addPeriods(periods);
+  try {
+    await store.addPeriods(periods);
+  } catch (error) {
+    if (error instanceof StoreConflict) {
+      return { proposed: false, reason: error.message, date: input.date, zone: input.zone };
+    }
+    throw error;
+  }
   return {
+    proposed: true,
     date: input.date,
     zone: input.zone,
     firstOccurrenceUtc: planned[0]?.startUtc ?? null,
