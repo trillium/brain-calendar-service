@@ -2,6 +2,7 @@
   "name": "brain-calendar-service",
   "version": "0.0.0",
   "private": true,
+  "license": "MIT",
   "description": "MCP-facing calendar and temporal-planning service; Beads/Dolt is the authoritative planning layer.",
   "packageManager": "pnpm@10.33.0",
   "scripts": {

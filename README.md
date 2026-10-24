@@ -23,3 +23,7 @@ write path refuses. Editing it by hand fails `canon:audit`.
 pnpm install --frozen-lockfile && pnpm run type-check && pnpm run lint \
   && pnpm run test -- --run && pnpm run health && pnpm run canon:audit
 ```
+
+## License
+
+MIT. See `LICENSE`.
