@@ -63,7 +63,7 @@
     {
       "module": "auth",
       "status": "not applicable",
-      "reason": "Conflict C3. The service authenticates to external calendar providers (Google OAuth, CalDAV), not to end users; there is no login page and no session proxy."
+      "reason": "Conflict C3. The service delegates all provider authentication to the gog CLI (Google OAuth lives there), and has no end users; there is no login page and no session proxy."
     },
     {
       "module": "database",

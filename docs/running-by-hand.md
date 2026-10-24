@@ -172,17 +172,15 @@ client does.
 |---|---|---|
 | node, pnpm, dolt | already installed | verified |
 | Disposable Dolt on 3399 | you, with `db:server` | verified |
-| A Google or CalDAV account to sync | **human-supplied** | not done |
-| Google OAuth client id and secret | **human-supplied** | not wired |
+| A Google account signed in through `gog auth add` | **human-supplied** | not done |
 | The calendar id to point at | **human-supplied** | not done |
 | Permission to write to that calendar | **human-supplied** | not done |
 
-The second half of that table is not a credentials problem. No code in `src/` or
-`scripts/` reads a provider token: the only environment variables read anywhere
-are `CALENDAR_DB_HOST`, `CALENDAR_DB_PORT`, `CALENDAR_DB_NAME`,
-`CALENDAR_DB_USER`, `CALENDAR_DB_PASSWORD`, and `CANON_ROOT`. The CalDAV
-transport takes an `Authorization` header as a parameter, and nothing in this
-repo ever supplies one. See [L4](#l4-there-is-no-credential-plumbing).
+Provider credentials never enter this repo: the gog CLI owns Google OAuth and
+token storage. The provider reads `GOG_ACCOUNT` (the address passed to gog as
+`-a`) and optionally `GOG_BIN`; the other environment variables read are
+`CALENDAR_DB_HOST`, `CALENDAR_DB_PORT`, `CALENDAR_DB_NAME`, `CALENDAR_DB_USER`,
+`CALENDAR_DB_PASSWORD`, and `CANON_ROOT`. See [L4](#l4-there-is-no-credential-plumbing).
 
 ## What this does not prove
 
@@ -228,11 +226,12 @@ applies `push` or `pull`. Running the live path against a calendar that had
 changes would report a correct plan and write nothing, which is exactly the
 outcome that reads like success.
 
-### L4: there is no credential plumbing
+### L4: the gog provider has never run against a live account
 
-See the table above. A real provider run needs code written first: mint and
-refresh a token, persist it, pass it as the transport's `Authorization` header,
-and handle the 403 refresh the transport already models.
+Credentials are gog's job, so there is no token code to write here. What is
+missing is a login: `gog auth list` showed no stored tokens, so the provider is
+proven only against `fixtures/gog/fake-gog.mjs`. Run `gog auth add` for a
+dedicated test calendar, then check the real JSON shapes against the fake's.
 
 ### L5: running the test suite dirties tracked files
 
@@ -248,12 +247,12 @@ have left `.dolt/noms/journal.idx` modified the same way.
 
 ### L6: scoped test commands do not narrow
 
-`pnpm run test -- src/adapters/caldav --run` runs all 104 tests, not the 18 in
+`pnpm run test -- src/adapters/gog --run` runs all 104 tests, not the 18 in
 that directory. pnpm forwards the `--`, and vitest then treats the filter as
 free text:
 ```
-$ npx vitest -- src/adapters/caldav --run   ->  Test Files 10, Tests 104
-$ npx vitest   src/adapters/caldav --run     ->  Test Files  1, Tests  18
+$ npx vitest -- src/adapters/gog --run   ->  Test Files 10, Tests 104
+$ npx vitest   src/adapters/gog --run     ->  Test Files  1, Tests  18
 ```
 This is recorded in `evidence/stage-10/skips.md`. It makes every scoped stage
 gate in `canon-profile.json` a whole-suite run: stricter than intended, not
@@ -275,9 +274,10 @@ pnpm run rollout:rollback-drill
 
 What each one actually showed:
 
-- `sync:measure` named a winner rather than a total: `REPORT dominated on bytes:
-  100.0%`, measured 43 requests per sync against a budget of 250. The model is
-  CTag plus ETag; it does not measure Google.
+- `sync:measure` names a winner rather than a total: it prints a per-subcommand
+  breakdown and which gog subcommand dominated, against a budget of 250. It
+  counts gog invocations against a fake gog executable; set `GOG_BIN` and
+  `GOG_ACCOUNT` to measure a real one.
 - `sync:replay` reached a fixpoint at round 2 with 0 duplicates, and alternated
   1 write, 0 writes, 1 write, 0, 0 across five rounds.
 - `sync:converge` wrote 2 events in round 1, dropped both as self-echo in round
@@ -310,5 +310,5 @@ In order, and none of them are a task for this document:
    empty in-process array, and write through it (L1).
 3. Build the apply path so `sync:once` without `--dry-run` does what its name
    says (L3).
-4. Add token mint, refresh, and storage, and pass the header (L4).
+4. Log gog in for a test calendar and verify the provider live (L4).
 5. Only then point it at a calendar a human has named, and soak it.

@@ -40,9 +40,9 @@
     },
     {
       "id": "S6",
-      "name": "External provider adapters, starting with Google over CalDAV",
+      "name": "External provider adapters, starting with Google through the gog CLI",
       "entry": "pnpm run test -- evidence/stage-05 --run",
-      "exitTest": "pnpm run test -- src/adapters/caldav --run && pnpm run sync:measure --scenario realistic --assert-under <budget>"
+      "exitTest": "pnpm run test -- src/adapters/gog --run && pnpm run sync:measure --scenario realistic --assert-under <budget>"
     },
     {
       "id": "S7",

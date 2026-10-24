@@ -9,7 +9,7 @@ four headings, so you can read one and know what the others look like.
 | 2 | recurrence and timezones | [recurrence.md](recurrence.md) | seconds, pure |
 | 3 | change detection | [changedetection.md](changedetection.md) | seconds, needs Dolt |
 | 4 | loop and duplicate prevention | [loop.md](loop.md) | seconds, pure |
-| 5 | CalDAV transport | [caldav.md](caldav.md) | seconds, local server |
+| 5 | gog provider | [gog.md](gog.md) | seconds, fake gog executable |
 | 6 | orchestration and quarantine | [orchestration.md](orchestration.md) | seconds, needs Dolt |
 | 7 | MCP surface | [mcp.md](mcp.md) | ~1 minute, spawns a process |
 | 8 | rollout and migration | [rollout.md](rollout.md) | seconds, needs Dolt |

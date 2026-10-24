@@ -40,7 +40,7 @@ export class PolicyViolation extends Error {
   }
 }
 
-interface OwnershipToken {
+export interface OwnershipToken {
   readonly token: string;
   readonly calendarId: string;
   readonly externalUid: string;
