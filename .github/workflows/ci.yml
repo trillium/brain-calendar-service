@@ -46,7 +46,19 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Install Dolt
+        run: |
+          curl -fsSL https://github.com/dolthub/dolt/releases/latest/download/install.sh | sudo bash
+          dolt version
+      # Throwaway server on 127.0.0.1:3399, the port the adapter defaults to.
+      - name: Start disposable Dolt server and migrate
+        run: |
+          bash scripts/start-local-dolt.sh start
+          pnpm run db:migrate
       - run: pnpm run test -- --run
+      - name: Stop Dolt server
+        if: always()
+        run: bash scripts/start-local-dolt.sh stop
 
   build:
     # C2: there is no next build to run. This service is a long-running sync
