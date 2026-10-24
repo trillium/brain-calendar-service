@@ -188,3 +188,25 @@ describe("cost accounting", () => {
     expect(profileCost([], 3).dominantByTime).toBeNull();
   });
 });
+
+describe("flags gog actually accepts (the fake rejects unknown flags)", () => {
+  it("updates with a time zone using the per-end flags", async () => {
+    await provider().updateEvent(policy, TEST_CAL, "e1", { timeZone: "America/Los_Angeles" });
+    const argv = calls()[0] ?? [];
+    expect(argv).toContain("--start-timezone=America/Los_Angeles");
+    expect(argv).toContain("--end-timezone=America/Los_Angeles");
+    expect(argv).not.toContain("--timezone=America/Los_Angeles");
+  });
+
+  it("creates with --timezone", async () => {
+    await provider().createEvent(policy, TEST_CAL, { timeZone: "America/Los_Angeles" });
+    expect(calls()[0]).toContain("--timezone=America/Los_Angeles");
+  });
+
+  it("refuses a marker value gog would split on a comma", async () => {
+    await expect(
+      provider().createEvent(policy, TEST_CAL, { privateProperties: { "X-Beads-Id": "a,b" } }),
+    ).rejects.toThrow(/comma/);
+    expect(() => readFileSync(log)).toThrow();
+  });
+});

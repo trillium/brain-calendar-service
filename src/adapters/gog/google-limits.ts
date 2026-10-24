@@ -48,6 +48,14 @@ export const assertWithinGoogleLimits = (props: PrivateProperties): void => {
   }
   let bytes = 0;
   for (const [key, value] of entries) {
+    // gog takes --private-prop as a comma-separated key=value list, so these
+    // characters would split or truncate the marker silently.
+    if (key.includes(",") || key.includes("=") || value.includes(",")) {
+      throw new PropertyLimitError(
+        `private property "${key}" contains a comma or equals sign that gog's ` +
+          `--private-prop list syntax cannot carry; the marker would be split or truncated.`,
+      );
+    }
     if (key.length > LIMITS.propertyKeyMax) {
       throw new PropertyLimitError(
         `private property key "${key}" is ${key.length} characters; Google silently DROPS ` +

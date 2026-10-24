@@ -15,6 +15,25 @@ if (process.env.FAKE_GOG_FAIL) {
   process.exit(1);
 }
 
+const COMMON = ["-a", "--json", "--no-input", "--readonly"];
+const WRITE = [
+  "summary",
+  "description",
+  "location",
+  "from",
+  "to",
+  "all-day",
+  "rrule",
+  "private-prop",
+  "send-updates",
+];
+const ALLOWED = {
+  events: ["all-pages", "from", "to", "max"],
+  raw: [],
+  create: [...WRITE, "timezone"],
+  update: [...WRITE, "start-timezone", "end-timezone"],
+  delete: ["force", "send-updates"],
+};
 const rest = args.slice(args.indexOf("calendar") + 1);
 const words = rest.filter((a, i) => !a.startsWith("-") && rest[i - 1] !== "-a");
 const [sub, ...positional] = words;
@@ -27,6 +46,14 @@ const event = (id, extra = {}) => ({
   extendedProperties: { private: { "X-Beads-Id": `bead-${id}` } },
   ...extra,
 });
+
+for (const a of rest.filter((x) => x.startsWith("--") && !COMMON.includes(x))) {
+  const name = a.slice(2).split("=")[0];
+  if (sub in ALLOWED && !ALLOWED[sub].includes(name)) {
+    process.stderr.write(`unknown flag --${name}\n`);
+    process.exit(2);
+  }
+}
 
 const out = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
 const flag = (name) => args.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);

@@ -79,7 +79,8 @@ interface GogProviderOptions {
   readonly readonly?: boolean;
 }
 
-const writeFlags = (draft: EventDraft): string[] => {
+// `gog calendar create` takes --timezone; `update` only has the per-end flags.
+const writeFlags = (draft: EventDraft, mode: "create" | "update"): string[] => {
   const out: string[] = [];
   const add = (flag: string, value: string | undefined) => {
     if (value !== undefined) out.push(`--${flag}=${value}`);
@@ -89,7 +90,12 @@ const writeFlags = (draft: EventDraft): string[] => {
   add("location", draft.location);
   add("from", draft.from);
   add("to", draft.to);
-  add("timezone", draft.timeZone);
+  if (mode === "create") {
+    add("timezone", draft.timeZone);
+  } else {
+    add("start-timezone", draft.timeZone);
+    add("end-timezone", draft.timeZone);
+  }
   if (draft.allDay === true) out.push("--all-day");
   for (const rule of draft.rrule ?? []) out.push(`--rrule=${rule}`);
   for (const [k, v] of Object.entries(draft.privateProperties ?? {})) {
@@ -140,7 +146,7 @@ export const createGogProvider = (options: GogProviderOptions): CalendarProvider
       assertPermitted(policy, calendarId, "INSERT");
       assertWithinGoogleLimits(draft.privateProperties ?? {});
       return parseEvent(
-        await call("create", [...writeFlags(draft), "--send-updates=none"], [calendarId]),
+        await call("create", [...writeFlags(draft, "create"), "--send-updates=none"], [calendarId]),
         "create",
       );
     },
@@ -148,7 +154,11 @@ export const createGogProvider = (options: GogProviderOptions): CalendarProvider
       assertPermitted(policy, calendarId, "UPDATE");
       assertWithinGoogleLimits(draft.privateProperties ?? {});
       return parseEvent(
-        await call("update", [...writeFlags(draft), "--send-updates=none"], [calendarId, eventId]),
+        await call(
+          "update",
+          [...writeFlags(draft, "update"), "--send-updates=none"],
+          [calendarId, eventId],
+        ),
         "update",
       );
     },
