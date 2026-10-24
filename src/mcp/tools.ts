@@ -12,14 +12,17 @@
 
 import { z } from "zod";
 import { expand } from "../domain/recurrence/expand.js";
+import { type PeriodRecord, type Store, StoreConflict } from "./store.js";
 
-/** The in-process store the tools read and write. */
-export interface Store {
-  periods: { grain: string; startUtc: string; endUtc: string; summary: string }[];
-  conflicts: { beadId: string | null; externalUid: string | null; reason: string }[];
-}
+const isoSeconds = (ms: number): string => `${new Date(ms).toISOString().slice(0, 19)}Z`;
 
-export const newStore = (): Store => ({ periods: [], conflicts: [] });
+/** The end of a query window: one grain after its (UTC midnight) start. */
+const windowEnd = (grain: "day" | "week" | "month", from: Date): string => {
+  const end = new Date(from);
+  if (grain === "month") end.setUTCMonth(end.getUTCMonth() + 1);
+  else end.setUTCDate(end.getUTCDate() + (grain === "week" ? 7 : 1));
+  return isoSeconds(end.getTime());
+};
 
 const QueryPeriod = z.object({
   grain: z.enum(["day", "week", "month"]),
@@ -57,13 +60,17 @@ const UnlinkExternal = z.object({
   calendarId: z.string().min(1),
 });
 
-export const queryPeriod = (store: Store, raw: unknown) => {
+export const queryPeriod = async (store: Store, raw: unknown) => {
   const input = QueryPeriod.parse(raw);
-  const found = store.periods.filter((p) => p.startUtc.startsWith(input.startUtc.slice(0, 10)));
-  return { grain: input.grain, zone: input.zone, periods: found };
+  const from = new Date(`${input.startUtc.slice(0, 10)}T00:00:00Z`);
+  const periods = await store.periodsBetween(
+    isoSeconds(from.getTime()),
+    windowEnd(input.grain, from),
+  );
+  return { grain: input.grain, zone: input.zone, periods };
 };
 
-const proposeDay = (store: Store, raw: unknown) => {
+const proposeDay = async (store: Store, raw: unknown) => {
   const input = ProposeDay.parse(raw);
   const planned = input.items.map((item) => {
     const [first] = expand({
@@ -76,11 +83,18 @@ const proposeDay = (store: Store, raw: unknown) => {
     const startUtc = first?.recurrenceIdUtc ?? null;
     return { item, startUtc };
   });
+  const periods: PeriodRecord[] = [];
   for (const { item, startUtc } of planned) {
     if (startUtc === null) continue;
-    const endUtc = new Date(Date.parse(startUtc) + item.minutes * 60_000).toISOString();
-    store.periods.push({ grain: "day", startUtc, endUtc, summary: item.summary });
+    const start = Date.parse(startUtc);
+    periods.push({
+      grain: "day",
+      startUtc: isoSeconds(start),
+      endUtc: isoSeconds(start + item.minutes * 60_000),
+      summary: item.summary,
+    });
   }
+  await store.addPeriods(periods);
   return {
     date: input.date,
     zone: input.zone,
@@ -89,35 +103,44 @@ const proposeDay = (store: Store, raw: unknown) => {
   };
 };
 
-export const moveCommitment = (store: Store, raw: unknown) => {
+export const moveCommitment = async (store: Store, raw: unknown) => {
   const input = MoveCommitment.parse(raw);
-  const target = store.periods.find((p) => p.summary === input.beadId);
-  if (!target) return { moved: false, reason: `no commitment named ${input.beadId}` };
-  target.startUtc = input.newStartUtc;
-  return { moved: true, beadId: input.beadId, startUtc: target.startUtc };
+  try {
+    const moved = await store.movePeriod(input.beadId, input.newStartUtc);
+    if (!moved) return { moved: false, reason: `no commitment named ${input.beadId}` };
+    return { moved: true, beadId: input.beadId, startUtc: moved.startUtc };
+  } catch (error) {
+    if (error instanceof StoreConflict) return { moved: false, reason: error.message };
+    throw error;
+  }
 };
 
-const linkExternal = (_store: Store, raw: unknown) => {
+const linkExternal = async (store: Store, raw: unknown) => {
   const input = LinkExternal.parse(raw);
+  try {
+    await store.link(input);
+  } catch (error) {
+    if (error instanceof StoreConflict) return { linked: false, reason: error.message, ...input };
+    throw error;
+  }
   return { linked: true, ...input };
 };
 
-const unlinkExternal = (_store: Store, raw: unknown) => {
+const unlinkExternal = async (store: Store, raw: unknown) => {
   const input = UnlinkExternal.parse(raw);
-  return { unlinked: true, ...input };
+  return { unlinked: await store.unlink(input.beadId, input.calendarId), ...input };
 };
 
 const ListChanges = z.object({ beadId: z.string().min(1).optional() });
 
-const listChanges = (store: Store, raw: unknown) => {
+const listChanges = async (store: Store, raw: unknown) => {
   const input = ListChanges.parse(raw);
-  return store.periods
-    .filter((p) => input.beadId === undefined || p.summary === input.beadId)
-    .map((p) => ({ beadId: p.summary, startUtc: p.startUtc, endUtc: p.endUtc }));
+  const periods = await store.listPeriods(input.beadId);
+  return periods.map((p) => ({ beadId: p.summary, startUtc: p.startUtc, endUtc: p.endUtc }));
 };
 
-const listQuarantined = (store: Store) => ({
-  conflicts: store.conflicts,
+const listQuarantined = async (store: Store) => ({
+  conflicts: await store.quarantined(),
   automaticResolution: false,
   note: "Quarantine has no exit path; resolving one is a human decision.",
 });
@@ -165,7 +188,7 @@ export const TOOLS = [
     name: "list_quarantined",
     description: "Surface quarantined conflicts.",
     schema: Nothing,
-    run: (_s: Store) => listQuarantined(_s),
+    run: listQuarantined,
   },
 ] as const;
 
@@ -185,11 +208,11 @@ export const TOOLS = [
  * accepts ZERO arguments. A handshake smoke test therefore passes while every
  * real tool call fails - the exact shape of "an exit code is not evidence".
  */
-export const dispatch = (store: Store, name: string, args: unknown): unknown => {
+export const dispatch = async (store: Store, name: string, args: unknown): Promise<unknown> => {
   const tool = TOOLS.find((t) => t.name === name);
   if (!tool)
     throw new Error(
       `Unknown tool "${name}". The surface is fixed; this is a bug, not a user error.`,
     );
-  return (tool.run as (s: Store, a: unknown) => unknown)(store, args);
+  return (tool.run as (s: Store, a: unknown) => Promise<unknown>)(store, args);
 };

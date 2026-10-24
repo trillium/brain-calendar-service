@@ -189,21 +189,18 @@ repo ever supplies one. See [L4](#l4-there-is-no-credential-plumbing).
 Found by running it, not by reading the tests. Each of these is invisible to the
 104 green tests.
 
-### L1: no tool reads or writes the database
+### L1: no tool reads or writes the database (RESOLVED)
 
-`src/mcp/` contains no reference to mysql, dolt, or any connection. The tools
-read and write an in-process `Store` that starts empty, and nothing in the tool
-surface ever puts a row into it. So over a real connection, `query_period`
-always returns `"periods":[]` and `move_commitment` always returns
-`{"moved":false,"reason":"no commitment named standup"}` - both confirmed above.
+Fixed: the tools now go through the `Store` port in `src/mcp/store.ts`, whose only
+implementation is `src/adapters/dolt/mcp-store.ts`. Periods live in
+`calendar_period`, links in `calendar_binding` and quarantine in
+`calendar_conflict`, in the database named by `CALENDAR_DB_*`. Every write is
+committed to Dolt history so change detection sees it. `src/mcp/persistence.test.ts`
+runs each step in a fresh server process to prove state survives the process.
+`mcp:smoke` now runs against a throwaway database so reruns start empty.
 
-The tests do not catch this because `tools.test.ts` seeds the store by hand
-before calling anything. `mcp:smoke` does not catch it because it calls
-`move_commitment`, discards the answer with `void moved`, and then reads a
-different tool. Its closing line claims a read-after-write; there was no write.
-
-Consequence: state does not survive a call, so a second command cannot see the
-first one's result even if the first one worked.
+The original finding, kept for the record: the tools read and write an in-process
+`Store` that starts empty, so `query_period` always returned `"periods":[]`.
 
 ### L2: `list_changes` fails on every input
 
