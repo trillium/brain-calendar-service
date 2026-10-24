@@ -24,6 +24,13 @@ const windowEnd = (grain: "day" | "week" | "month", from: Date): string => {
   return isoSeconds(end.getTime());
 };
 
+// Bounds mirror the Dolt column widths (migrations/), so an over-long value is a
+// typed validation refusal at the boundary rather than a driver error mid-write.
+// A commitment's summary is stored in calendar_period.linked_bead_id.
+const MAX_BEAD_ID = 64;
+const MAX_CALENDAR_ID = 24;
+const MAX_EXTERNAL_UID = 512;
+
 const QueryPeriod = z.object({
   grain: z.enum(["day", "week", "month"]),
   startUtc: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/),
@@ -36,7 +43,7 @@ const ProposeDay = z.object({
   items: z
     .array(
       z.object({
-        summary: z.string().min(1),
+        summary: z.string().min(1).max(MAX_BEAD_ID),
         startLocal: z.string(),
         minutes: z.number().int().positive(),
       }),
@@ -45,19 +52,19 @@ const ProposeDay = z.object({
 });
 
 const MoveCommitment = z.object({
-  beadId: z.string().min(1),
+  beadId: z.string().min(1).max(MAX_BEAD_ID),
   newStartUtc: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/),
 });
 
 const LinkExternal = z.object({
-  beadId: z.string().min(1),
-  calendarId: z.string().min(1),
-  externalUid: z.string().min(1),
+  beadId: z.string().min(1).max(MAX_BEAD_ID),
+  calendarId: z.string().min(1).max(MAX_CALENDAR_ID),
+  externalUid: z.string().min(1).max(MAX_EXTERNAL_UID),
 });
 
 const UnlinkExternal = z.object({
-  beadId: z.string().min(1),
-  calendarId: z.string().min(1),
+  beadId: z.string().min(1).max(MAX_BEAD_ID),
+  calendarId: z.string().min(1).max(MAX_CALENDAR_ID),
 });
 
 export const queryPeriod = async (store: Store, raw: unknown) => {
@@ -131,7 +138,7 @@ const unlinkExternal = async (store: Store, raw: unknown) => {
   return { unlinked: await store.unlink(input.beadId, input.calendarId), ...input };
 };
 
-const ListChanges = z.object({ beadId: z.string().min(1).optional() });
+const ListChanges = z.object({ beadId: z.string().min(1).max(MAX_BEAD_ID).optional() });
 
 const listChanges = async (store: Store, raw: unknown) => {
   const input = ListChanges.parse(raw);

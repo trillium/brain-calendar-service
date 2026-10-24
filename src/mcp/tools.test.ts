@@ -248,3 +248,59 @@ describe("quarantine", () => {
     });
   });
 });
+
+describe("input bounds match the store's column widths", () => {
+  const long = (n: number) => "x".repeat(n);
+
+  it("refuses an over-long summary or bead id with a validation error, writing nothing", async () => {
+    await expect(
+      dispatch(store, "propose_day", {
+        zone: "UTC",
+        date: "2026-04-01",
+        items: [{ summary: long(65), startLocal: "2026-04-01T09:00:00", minutes: 15 }],
+      }),
+    ).rejects.toThrow();
+    await expect(
+      dispatch(store, "move_commitment", {
+        beadId: long(65),
+        newStartUtc: "2026-04-01T11:00:00Z",
+      }),
+    ).rejects.toThrow();
+    await expect(dispatch(store, "list_changes", { beadId: long(65) })).rejects.toThrow();
+    expect(await store.listPeriods()).toHaveLength(0);
+  });
+
+  it("accepts values exactly at the limit", async () => {
+    await dispatch(store, "propose_day", {
+      zone: "UTC",
+      date: "2026-04-01",
+      items: [{ summary: long(64), startLocal: "2026-04-01T09:00:00", minutes: 15 }],
+    });
+    expect(await store.listPeriods(long(64))).toHaveLength(1);
+    expect(
+      await dispatch(store, "link_external", {
+        beadId: long(64),
+        calendarId: "cal-1",
+        externalUid: long(512),
+      }),
+    ).toMatchObject({ linked: true });
+  });
+
+  it("refuses an over-long link bead id, calendar id or external uid", async () => {
+    const ok = { beadId: "b", calendarId: "cal-1", externalUid: "u" };
+    for (const bad of [
+      { ...ok, beadId: long(65) },
+      { ...ok, calendarId: long(25) },
+      { ...ok, externalUid: long(513) },
+    ]) {
+      await expect(dispatch(store, "link_external", bad)).rejects.toThrow();
+    }
+    // unlink takes no external uid, so only the bead and calendar bounds apply to it.
+    for (const bad of [
+      { beadId: long(65), calendarId: "cal-1" },
+      { beadId: "b", calendarId: long(25) },
+    ]) {
+      await expect(dispatch(store, "unlink_external", bad)).rejects.toThrow();
+    }
+  });
+});
