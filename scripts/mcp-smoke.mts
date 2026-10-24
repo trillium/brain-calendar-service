@@ -11,11 +11,17 @@
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { createTestDatabase } from "../src/mcp/test-db.ts";
+
+// The server persists to Dolt, so the smoke runs against a throwaway database:
+// a rerun starts from an empty store instead of inheriting the last run's rows.
+const db = await createTestDatabase();
 
 const transport = new StdioClientTransport({
   command: "npx",
   args: ["tsx", "src/mcp/entry.ts"],
   cwd: process.cwd(),
+  env: { ...(process.env as Record<string, string>), CALENDAR_DB_NAME: db.name },
 });
 const client = new Client({ name: "mcp-smoke", version: "0.0.0" });
 await client.connect(transport);
@@ -50,7 +56,7 @@ const readChanges = async (beadId: string) => {
   return JSON.parse(content[0]?.text ?? "null") as unknown[];
 };
 
-// READ tool first: the store starts empty, so the query must return nothing.
+// READ tool first: the (fresh) store starts empty, so the query must return nothing.
 const before = parse(
   await client.callTool({
     name: "query_period",
@@ -107,6 +113,7 @@ if (quarantined.automaticResolution !== false) {
 }
 
 await client.close();
+await db.drop();
 
 console.log("mcp:smoke");
 console.log(`  server: ${init?.name}`);
