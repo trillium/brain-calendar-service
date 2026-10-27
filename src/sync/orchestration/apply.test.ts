@@ -87,7 +87,6 @@ const round = async (
     conn,
     calendarId: String(throwaway.id),
     provider: "google",
-    remoteChanges: [],
     providerCalls: () => [],
     dryRun: false,
   });

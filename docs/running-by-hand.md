@@ -124,8 +124,9 @@ bash scripts/start-local-dolt.sh stop
 ## The minimal real calendar operation
 
 As of this commit the only operation that writes to a calendar is the live
-`sync:once` push, which creates and updates events on one registered calendar and
-has only run against the fake gog. See [L3](#l3-the-push-path-exists-but-has-only-run-against-a-fake-gog-partly-resolved).
+`sync:once`, which creates and updates events on one registered calendar, pulls
+time edits made on the provider back into Dolt, and has only run against the fake
+gog. See [L3](#l3-the-push-path-exists-but-has-only-run-against-a-fake-gog-partly-resolved).
 
 The closest thing that genuinely happens today, and the one worth running first,
 is step 6 above: it registers a calendar in `calendar_calendar` and writes its sync
@@ -216,7 +217,7 @@ Fixed in `4edba70`: the handler now parses its arguments against the object
 schema. Original finding: any object failed with `Invalid input`, because the
 handler parsed the whole arguments object against a schema for a single string.
 
-### L3: the push path exists but has only run against a fake gog (PARTLY RESOLVED)
+### L3: the push and pull paths exist but have only run against a fake gog (PARTLY RESOLVED)
 
 `sync:once` without `--dry-run` now resolves `--calendar` through the
 `calendar_calendar` registry (`pnpm run calendar:register --remote-id <id> --name
@@ -224,8 +225,12 @@ handler parsed the whole arguments object against a schema for a single string.
 updates one event per changed `calendar_period` on that registered calendar only,
 records a `calendar_binding` with a minted ownership token as a Dolt commit, and
 advances the cursor only after every push succeeded. Nothing is ever deleted. It
-is proven against `fixtures/gog/fake-gog.mjs` only; pull from the provider and
-self-echo handling are not built, so an edit made on the provider is not read back.
+also lists the registered calendar (a `--dry-run` does too, read only) and pulls a
+remote time edit of an event it created into `calendar_period` as one Dolt commit;
+its own writes coming back are dropped, an event this service did not create is
+reported and never imported, and an edit made on both sides at once is written to
+`calendar_conflict` and applies nothing. Each live round appends a line to
+`evidence/soak/report.json`. It is proven against `fixtures/gog/fake-gog.mjs` only.
 A calendar with no cursor is baselined to the current Dolt head on its first live
 run, so a period must be proposed after that first run to be pushed.
 
@@ -310,6 +315,6 @@ In order, and none of them are a task for this document:
 
 1. ~~Fix `list_changes` (L2).~~ Done.
 2. ~~Give the tools a real store (L1).~~ Done: the tools read and write Dolt.
-3. ~~Build the push apply path (L3).~~ Done against the fake gog; pull is next.
+3. ~~Build the push apply path (L3).~~ Done against the fake gog, with the pull half.
 4. Log gog in for a test calendar and verify the provider live (L4).
 5. Only then point it at a calendar a human has named, and soak it.

@@ -28,7 +28,6 @@ const cycle = async (
     conn,
     calendarId: "cal-1",
     provider: "google",
-    remoteChanges: [],
     providerCalls: calls,
   });
 
@@ -61,7 +60,6 @@ describe("a cycle plans before it writes", () => {
         conn,
         calendarId: "cal-1",
         provider: "google",
-        remoteChanges: [],
         providerCalls: async () => {
           await conn.query(
             `INSERT INTO calendar_period
@@ -162,7 +160,6 @@ describe("the write path is allowlisted", () => {
         conn,
         calendarId: "cal-not-permitted",
         provider: "google",
-        remoteChanges: [],
         providerCalls: () => [],
       }),
     ).resolves.toBeDefined(); // planning is allowed; APPLYING is not
