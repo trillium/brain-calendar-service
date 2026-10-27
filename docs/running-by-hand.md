@@ -166,8 +166,10 @@ ran against a throwaway database; run against the default one, `mcp:call` writes
 to `brain_calendar_service`, and each write is a Dolt commit. Set
 `CALENDAR_DB_NAME` (or `CALENDAR_DB_HOST`, `CALENDAR_DB_PORT`, `CALENDAR_DB_USER`,
 `CALENDAR_DB_PASSWORD`) on the command line to point it elsewhere. `mcp:call`
-hands the server exactly those names plus `GOG_ACCOUNT` and `GOG_BIN`, and
-nothing else, so no keyring or token variable reaches the child process.
+hands the server exactly those names and nothing else, so no keyring or token
+variable reaches the child process. The MCP server never calls gog; only the
+sync scripts read `GOG_ACCOUNT` and `GOG_BIN`, alongside the sourced
+`~/.config/gog/env` described below.
 
 ## Using it from a voice assistant
 

@@ -2,19 +2,9 @@ import { describe, expect, it } from "vitest";
 import { PASSTHROUGH_ENV, serverEnv } from "./call-env.js";
 
 describe("serverEnv", () => {
-  it("passes the database and gog names through", () => {
-    const env = serverEnv({
-      CALENDAR_DB_PORT: "3417",
-      CALENDAR_DB_NAME: "scratch",
-      GOG_ACCOUNT: "someone@example.com",
-      GOG_BIN: "/opt/bin/gog",
-    });
-    expect(env).toEqual({
-      CALENDAR_DB_PORT: "3417",
-      CALENDAR_DB_NAME: "scratch",
-      GOG_ACCOUNT: "someone@example.com",
-      GOG_BIN: "/opt/bin/gog",
-    });
+  it("passes the database names through", () => {
+    const env = serverEnv({ CALENDAR_DB_PORT: "3417", CALENDAR_DB_NAME: "scratch" });
+    expect(env).toEqual({ CALENDAR_DB_PORT: "3417", CALENDAR_DB_NAME: "scratch" });
   });
 
   it("leaves out secrets and every name it was not told about", () => {
@@ -22,6 +12,8 @@ describe("serverEnv", () => {
       GOG_KEYRING_PASSWORD: "hunter2",
       GOG_KEYRING_BACKEND: "file",
       GOG_ACCESS_TOKEN: "token",
+      GOG_ACCOUNT: "someone@example.com",
+      GOG_BIN: "/opt/bin/gog",
       GITHUB_TOKEN: "ghp_x",
       PATH: "/usr/bin",
       CALENDAR_DB_NAME: "scratch",
@@ -30,7 +22,7 @@ describe("serverEnv", () => {
   });
 
   it("drops names that are unset or empty so the server defaults still apply", () => {
-    const env = serverEnv({ CALENDAR_DB_HOST: "", GOG_BIN: undefined });
+    const env = serverEnv({ CALENDAR_DB_HOST: "", CALENDAR_DB_PORT: undefined });
     expect(env).toEqual({});
   });
 

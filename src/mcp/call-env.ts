@@ -12,8 +12,6 @@ export const PASSTHROUGH_ENV = [
   "CALENDAR_DB_NAME",
   "CALENDAR_DB_USER",
   "CALENDAR_DB_PASSWORD",
-  "GOG_ACCOUNT",
-  "GOG_BIN",
 ] as const;
 
 export const serverEnv = (source: NodeJS.ProcessEnv): Record<string, string> => {
