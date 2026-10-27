@@ -3,7 +3,8 @@
 // What this step may do is deliberately narrow: INSERT and UPDATE on the one
 // calendar the SyncPolicy names, nothing else. There is no delete here, and a
 // planned push for a period that no longer exists is reported as skipped rather
-// than turned into one.
+// than turned into one. A round with any such skip is incomplete: the skips are
+// returned and the cursor stays, so the next round sees them again.
 //
 // Order of effects for a create, and why:
 //
@@ -50,6 +51,7 @@ interface Counts {
   created: number;
   updated: number;
   adopted: number;
+  unchanged: number;
   skipped: Skipped[];
 }
 
@@ -58,6 +60,12 @@ export type ApplyResult =
       readonly state: "ok";
       readonly cursorBefore: string | null;
       readonly cursorAfter: string;
+    })
+  | (Counts & {
+      /** Every push that could be applied was; `skipped` lists the ones that could not. */
+      readonly state: "incomplete";
+      /** Always the cursor the round started with: the skips are diffed again next round. */
+      readonly cursorBefore: string | null;
     })
   | (Counts & {
       readonly state: "failed";
@@ -113,22 +121,31 @@ const refusal = (plan: SyncPlan): StepFailure | null => {
 };
 
 export const applyPlan = async (input: ApplyInput): Promise<ApplyResult> => {
-  const counts: Counts = { created: 0, updated: 0, adopted: 0, skipped: [] };
+  const counts: Counts = { created: 0, updated: 0, adopted: 0, unchanged: 0, skipped: [] };
   const refused = refusal(input.plan);
   if (refused !== null) return failed(counts, input.plan, refused, null);
-  const ctx: Context = { ...input, listed: null };
-  const logAtStart = await logLength(input.conn);
+  const ctx: Context = input;
+  let logAtStart: number;
+  try {
+    logAtStart = await viaStore(() => logLength(input.conn));
+  } catch (error) {
+    return failed(counts, input.plan, error, null);
+  }
   let ownCommits = 0;
   for (const push of input.plan.push) {
     try {
       const outcome = await applyOne(ctx, push);
-      if (typeof outcome === "string") {
+      if (typeof outcome !== "string") counts.skipped.push(outcome);
+      else {
         counts[outcome] += 1;
-        ownCommits += 1;
-      } else counts.skipped.push(outcome);
+        if (outcome !== "unchanged") ownCommits += 1;
+      }
     } catch (error) {
       return failed(counts, input.plan, error, push.beadId);
     }
+  }
+  if (counts.skipped.length > 0) {
+    return { ...counts, state: "incomplete", cursorBefore: input.plan.cursorBefore };
   }
   try {
     const target = await cursorTarget(ctx, logAtStart, ownCommits);

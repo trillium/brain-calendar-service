@@ -10,7 +10,8 @@
 // to a provider, and the plan it emits carries the OBSERVATIONS that prove it, not
 // a promise that it did. The live path builds the gog provider (GOG_ACCOUNT, and
 // GOG_BIN when gog is not on PATH), applies the plan's pushes to the registered
-// calendar only, and advances the cursor only after every push succeeded.
+// calendar only, and advances the cursor only after every push succeeded; a round
+// that had to skip a push it could not apply exits non-zero with the cursor held.
 
 import { createConnection } from "mysql2/promise";
 import { resolveCalendar } from "../src/adapters/dolt/calendar-registry.ts";
@@ -55,12 +56,18 @@ const bootstrapCursor = async (calendarId: number): Promise<void> => {
   );
 };
 
+const describeOutcome = (result: ApplyResult): string => {
+  if (result.state === "ok") return ` cursor=${result.cursorAfter}`;
+  if (result.state === "incomplete") {
+    const skips = result.skipped.map((s) => `${s.beadId} (${s.reason})`).join(", ");
+    return ` cursor_unchanged=${result.cursorBefore}: not applied: ${skips}`;
+  }
+  return ` kind=${result.kind} at=${result.at ?? "-"} cursor_unchanged=${result.cursorBefore}: ${result.message}`;
+};
+
 const describeApply = (result: ApplyResult): string =>
   `apply ${result.state} created=${result.created} updated=${result.updated} ` +
-  `adopted=${result.adopted} skipped=${result.skipped.length}` +
-  (result.state === "failed"
-    ? ` kind=${result.kind} at=${result.at ?? "-"} cursor_unchanged=${result.cursorBefore}: ${result.message}`
-    : ` cursor=${result.cursorAfter}`);
+  `adopted=${result.adopted} skipped=${result.skipped.length}${describeOutcome(result)}`;
 
 try {
   const { id: calendarId, registered } = await resolveCalendar(
@@ -118,7 +125,7 @@ try {
     console.error("sync:once: a clean calendar must quarantine nothing");
     process.exitCode = 1;
   }
-  if (applied?.state === "failed") {
+  if (applied !== null && applied.state !== "ok") {
     console.error(`sync:once: ${describeApply(applied)}`);
     process.exitCode = 1;
   }

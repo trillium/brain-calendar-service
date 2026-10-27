@@ -204,6 +204,32 @@ describe("create", () => {
     expect(status).toHaveLength(0);
   });
 
+  it("adopts a marked event whose listing omits the marker and whose start has an offset", async () => {
+    await store.addPeriods([day(1, "standup")]);
+    const [row] = (await conn.query<RowDataPacket[]>("SELECT id FROM calendar_period"))[0];
+    await provider().createEvent(pushPolicy("google", THROWAWAY), THROWAWAY, {
+      summary: "standup",
+      from: "2026-04-01T03:00:00-07:00",
+      to: "2026-04-01T04:00:00-07:00",
+      privateProperties: {
+        [MARKER_KEY]: `${SOURCE_DATABASE}:period:${row?.id}`,
+        [OWNER_KEY]: "b".repeat(48),
+      },
+    });
+    const real = provider();
+    const lossy: CalendarProvider = {
+      ...real,
+      listEvents: async (calendarId, window) =>
+        (await real.listEvents(calendarId, window)).map((e) => ({ ...e, privateProperties: {} })),
+    };
+    const { result } = await round({ provider: lossy });
+    expect(result).toMatchObject({ state: "ok", created: 0, adopted: 1 });
+    expect(state().calls.create).toBe(1);
+    expect(remoteEvents(THROWAWAY)).toHaveLength(1);
+    const [bindings] = await conn.query<RowDataPacket[]>("SELECT * FROM calendar_binding");
+    expect(bindings[0]?.ownership_token).toBe("b".repeat(48));
+  });
+
   it("adopts an event that was created but never bound, instead of duplicating it", async () => {
     await store.addPeriods([day(1, "standup")]);
     const [row] = (await conn.query<RowDataPacket[]>("SELECT id FROM calendar_period"))[0];
@@ -249,18 +275,26 @@ describe("update", () => {
     expect((await round()).result).toMatchObject({ state: "ok", created: 0, updated: 0 });
   });
 
-  it("reports a deleted period as skipped; no delete is ever sent", async () => {
+  it("reports a deleted period as not applied, keeps the cursor, and never sends a delete", async () => {
     await store.addPeriods([day(1, "standup")]);
     await round();
     await conn.query("DELETE FROM calendar_period");
     await conn.query("CALL DOLT_ADD('calendar_period')");
     await conn.query("CALL DOLT_COMMIT('-m', 'drop period')");
-    const { result } = await round();
-    expect(result).toMatchObject({ state: "ok", created: 0, updated: 0 });
-    expect(result.skipped).toHaveLength(1);
-    expect(result.skipped[0]?.reason).toMatch(/deletes are not applied/);
+    const before = await cursor();
+    const { plan, result } = await round();
+    expect(result).toMatchObject({ state: "incomplete", created: 0, updated: 0 });
+    expect(result.skipped).toEqual([
+      { beadId: plan.push[0]?.beadId, reason: expect.stringMatching(/deletes are not applied/) },
+    ]);
+    expect(await cursor()).toBe(before);
     expect(argvLog().some((a) => a.includes("delete"))).toBe(false);
     expect(remoteEvents(THROWAWAY)).toHaveLength(1);
+
+    const again = await round();
+    expect(again.result.state).toBe("incomplete");
+    expect(again.result.skipped).toHaveLength(1);
+    expect(await cursor()).toBe(before);
   });
 });
 
@@ -299,6 +333,42 @@ describe("the cursor", () => {
     const { result } = await round();
     expect(result).toMatchObject({ state: "ok", cursorAfter: await headHash() });
     expect(await cursor()).toBe(await headHash());
+  });
+
+  it("still advances when a re-run finds every push already applied", async () => {
+    await store.addPeriods([day(1, "standup")]);
+    const before = await cursor();
+    await round();
+    await conn.query("UPDATE calendar_sync_cursor SET last_synced_commit_hash = ?", [before]);
+    const { plan, result } = await round();
+    expect(plan.push.map((p) => p.beadId)).toContainEqual(
+      expect.stringMatching(/^row:calendar_binding:/),
+    );
+    expect(result).toMatchObject({ state: "ok", created: 0, skipped: [] });
+    expect(state().calls.create).toBe(1);
+    expect(remoteEvents(THROWAWAY)).toHaveLength(1);
+    expect(await cursor()).toBe(await headHash());
+  });
+
+  it("returns a typed store failure when Dolt fails before any push", async () => {
+    await store.addPeriods([day(1, "standup")]);
+    const { plan } = await round({ policy: pushPolicy("google", MASSAGE) });
+    const broken = {
+      query: async () => {
+        throw new Error("dolt is down");
+      },
+    } as unknown as Connection;
+    const result = await applyPlan({
+      conn: broken,
+      provider: provider(),
+      plan,
+      policy: pushPolicy("google", THROWAWAY),
+      calendar: { id: throwaway.id, remoteCalendarId: THROWAWAY },
+      sourceDatabase: SOURCE_DATABASE,
+    });
+    expect(failedOf(result)).toMatchObject({ kind: "store", at: null });
+    expect(failedOf(result).message).toMatch(/dolt is down/);
+    expect(state().calls.create).toBeUndefined();
   });
 
   it("stays put on a provider error, returns a typed failure, and a re-run completes", async () => {

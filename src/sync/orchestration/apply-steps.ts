@@ -4,7 +4,7 @@
 
 import { randomBytes } from "node:crypto";
 import type { Connection } from "mysql2/promise";
-import type { CalendarProvider, ProviderEvent } from "../../adapters/provider.js";
+import type { CalendarProvider } from "../../adapters/provider.js";
 import { PolicyViolation, type SyncPolicy } from "../loop/policy.js";
 import {
   draftFor,
@@ -43,6 +43,7 @@ export class StepFailure extends Error {
 }
 
 const PERIOD_ROW = /^row:calendar_period:(\d+)$/;
+const BINDING_ROW = /^row:calendar_binding:\d+$/;
 const mintToken = (): string => randomBytes(24).toString("hex");
 export const messageOf = (error: unknown): string =>
   error instanceof Error ? `${error.name}: ${error.message}` : String(error);
@@ -74,15 +75,10 @@ export interface Context {
   readonly policy: SyncPolicy;
   readonly calendar: { readonly id: number; readonly remoteCalendarId: string };
   readonly sourceDatabase: string;
-  listed: Promise<readonly ProviderEvent[]> | null;
 }
 
-const listed = (ctx: Context): Promise<readonly ProviderEvent[]> => {
-  ctx.listed ??= ctx.provider.listEvents(ctx.calendar.remoteCalendarId);
-  return ctx.listed;
-};
-
-type Outcome = "created" | "updated" | "adopted";
+/** `unchanged` is a push that needs no write: a binding row is this step's own bookkeeping. */
+type Outcome = "created" | "updated" | "adopted" | "unchanged";
 
 const update = async (
   ctx: Context,
@@ -108,7 +104,13 @@ const create = async (ctx: Context, beadId: string, period: PeriodRow): Promise<
   const draft = draftFor(period);
   const marker = markerValue(ctx.sourceDatabase, period.id);
   const found = await viaProvider(async () =>
-    findMarked(ctx.provider, remote, await listed(ctx), marker, draft),
+    findMarked(
+      ctx.provider,
+      remote,
+      await ctx.provider.listEvents(remote, { from: draft.from, to: draft.to }),
+      marker,
+      draft,
+    ),
   );
   const token = found?.privateProperties[OWNER_KEY] ?? mintToken();
   const event =
@@ -133,6 +135,7 @@ const create = async (ctx: Context, beadId: string, period: PeriodRow): Promise<
 };
 
 export const applyOne = async (ctx: Context, push: PlanPush): Promise<Outcome | Skipped> => {
+  if (BINDING_ROW.test(push.beadId)) return "unchanged";
   const match = PERIOD_ROW.exec(push.beadId);
   if (match === null) return { beadId: push.beadId, reason: "not a calendar_period row" };
   const periodId = Number(match[1]);

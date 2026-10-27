@@ -66,7 +66,7 @@ export const findMarked = async (
     (e) =>
       e.privateProperties[MARKER_KEY] === undefined &&
       e.summary === draft.summary &&
-      e.start?.dateTime === draft.from,
+      Date.parse(e.start?.dateTime ?? "") === Date.parse(draft.from ?? ""),
   );
   for (const candidate of candidates) {
     const full = await provider.getEvent(remoteCalendarId, candidate.id);
