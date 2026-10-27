@@ -8,8 +8,9 @@
 //   1. the plan is INTERNALLY CONSISTENT: every bead resolves, nothing appears as
 //      both a push and a pull, no write is issued for an unchanged pair, and
 //      every external write carries an idempotency key.
-//   2. the plan was NOT EXECUTED: observed row deltas are zero, no mutating
-//      provider method was called, and the Dolt head did not move.
+//   2. the plan was NOT EXECUTED: observed row deltas are zero, no observed table's
+//      working-set hash moved, no mutating provider method was called, and the
+//      Dolt head did not move.
 //
 // A dry-run that only proves job 1 proves that a flag was honoured. Job 2 is
 // what proves nothing happened.
@@ -30,6 +31,8 @@ interface Plan {
   quarantined: unknown[];
   observations: {
     rowDeltas: Record<string, number>;
+    tableHashesBefore: Record<string, string>;
+    tableHashesAfter: Record<string, string>;
     providerCalls: { method: string }[];
     doltHeadBefore: string | null;
     doltHeadAfter: string | null;
@@ -77,10 +80,14 @@ for (const p of [...plan.push, ...plan.pull]) {
 for (const [table, delta] of Object.entries(plan.observations.rowDeltas)) {
   if (delta !== 0) failures.push(`dry-run changed ${delta} row(s) in ${table}`);
 }
+for (const [table, hash] of Object.entries(plan.observations.tableHashesBefore)) {
+  if (plan.observations.tableHashesAfter[table] !== hash) {
+    failures.push(`dry-run modified ${table} in the Dolt working set`);
+  }
+}
 // gog verbs (create, update, delete, move) and the HTTP verbs a raw transport uses.
-const MUTATING_PREFIXES = ["put", "post", "patch", "delete", "create", "update", "move"];
-const isMutating = (method: string) =>
-  MUTATING_PREFIXES.some((p) => method.toLowerCase().startsWith(p));
+const MUTATING_METHODS = new Set(["create", "update", "delete", "move", "put", "post", "patch"]);
+const isMutating = (method: string) => MUTATING_METHODS.has(method.toLowerCase());
 for (const call of plan.observations.providerCalls) {
   if (isMutating(call.method)) {
     failures.push(`dry-run issued a mutating provider call: ${call.method}`);

@@ -4,7 +4,6 @@
 // worth anything if a violation is detectable, so these tests deliberately
 // violate each guarantee and confirm the gate catches it.
 
-import { readFileSync } from "node:fs";
 import type { RowDataPacket } from "mysql2";
 import type { Connection } from "mysql2/promise";
 import { createConnection } from "mysql2/promise";
@@ -22,7 +21,9 @@ afterAll(async () => {
   await conn?.end();
 });
 
-const cycle = async (calls: () => { method: string }[] = () => []) =>
+const cycle = async (
+  calls: () => { method: string }[] | Promise<{ method: string }[]> = () => [],
+) =>
   buildSyncPlan({
     conn,
     calendarId: "cal-1",
@@ -77,6 +78,37 @@ describe("a cycle plans before it writes", () => {
     }
   });
 
+  it("observes an UPDATE-only write, which leaves row counts unchanged", async () => {
+    const ts = "2099-02-01 00:00:00";
+    await conn.query(
+      `INSERT INTO calendar_period
+         (grain, period_start_utc, period_end_utc, attributes_json, created_at, updated_at)
+       VALUES ('day', ?, ?, '{}', ?, ?)`,
+      [ts, ts, ts, ts],
+    );
+    try {
+      const plan = await cycle(async () => {
+        await conn.query(
+          "UPDATE calendar_period SET period_end_utc = ? WHERE period_start_utc = ?",
+          ["2099-02-02 00:00:00", ts],
+        );
+        return [];
+      });
+      expect(plan.observations.rowDeltas.calendar_period).toBe(0);
+      expect(plan.observations.tableHashesAfter.calendar_period).not.toBe(
+        plan.observations.tableHashesBefore.calendar_period,
+      );
+    } finally {
+      await conn.query("DELETE FROM calendar_period WHERE period_start_utc = ?", [ts]);
+    }
+  });
+
+  it("observes unchanged working-set hashes for a clean plan", async () => {
+    const plan = await cycle();
+    expect(Object.keys(plan.observations.tableHashesBefore)).toContain("calendar_sync_cursor");
+    expect(plan.observations.tableHashesAfter).toEqual(plan.observations.tableHashesBefore);
+  });
+
   it("reports the Dolt head, unmoved by a plan", async () => {
     const plan = await cycle();
     expect(plan.observations.doltHeadBefore).toMatch(/^[0-9a-v]{32}$/);
@@ -93,10 +125,33 @@ describe("a cycle plans before it writes", () => {
 });
 
 describe("quarantine has no automatic exit", () => {
-  it("produces a sink with no promotion step in the module", async () => {
-    const source = readFileSync("src/sync/orchestration/plan.ts", "utf8");
-    expect(source).not.toMatch(/resolved\s*[:=]\s*true/);
-    expect(source).not.toMatch(/UPDATE\s+calendar_conflict/i);
+  it("leaves calendar_conflict rows unchanged and unresolved by a quarantining plan", async () => {
+    const ts = "2099-03-01 00:00:00";
+    const [inserted] = await conn.query(
+      `INSERT INTO calendar_conflict (calendar_id, reason, created_at, updated_at)
+       VALUES (990002, 'orchestration-test', ?, ?)`,
+      [ts, ts],
+    );
+    const id = (inserted as { insertId: number }).insertId;
+    const conflicts = async () => {
+      const [rows] = await conn.query<RowDataPacket[]>(
+        "SELECT * FROM calendar_conflict ORDER BY id",
+      );
+      return rows;
+    };
+    try {
+      const before = await conflicts();
+      const plan = await cycle();
+      expect(plan.conflictsQuarantined).toBeGreaterThan(0);
+      expect(await conflicts()).toEqual(before);
+      const [mine] = await conn.query<RowDataPacket[]>(
+        "SELECT resolved, decision_id FROM calendar_conflict WHERE id = ?",
+        [id],
+      );
+      expect(mine[0]).toEqual({ resolved: 0, decision_id: null });
+    } finally {
+      await conn.query("DELETE FROM calendar_conflict WHERE id = ?", [id]);
+    }
   });
 });
 

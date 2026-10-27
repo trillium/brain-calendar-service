@@ -194,7 +194,7 @@ describe("change detection on calendar_binding", () => {
     await commitBinding("binding regression cleanup");
   });
 
-  it("detects a changed external sequence, and ignores bookkeeping-only edits", async () => {
+  it("detects a changed external uid, and ignores bookkeeping-only edits", async () => {
     const [inserted] = await conn.query(
       `INSERT INTO calendar_binding
          (bead_id, calendar_id, external_uid, external_sequence, created_at, updated_at)
@@ -205,16 +205,23 @@ describe("change detection on calendar_binding", () => {
     await commitBinding("binding regression insert");
     const cursor = await headCommit(conn);
 
-    await conn.query("UPDATE calendar_binding SET updated_at = ? WHERE id = ?", [
-      "2026-02-02 00:00:00",
-      id,
-    ]);
+    // Exactly what a sync writes when it records a round.
+    await conn.query(
+      `UPDATE calendar_binding
+         SET external_sequence = 1, last_synced_commit_hash = ?, last_synced_etag = ?,
+             last_synced_dtstamp = ?, updated_at = ?
+       WHERE id = ?`,
+      [cursor, '"etag-1"', "2026-02-02 00:00:00", "2026-02-02 00:00:00", id],
+    );
     await commitBinding("binding bookkeeping only");
     const quiet = await detectChanges(conn, "calendar_binding", cursor);
     expect(quiet.state === "ok" && quiet.changedIds).toEqual([]);
 
-    await conn.query("UPDATE calendar_binding SET external_sequence = 1 WHERE id = ?", [id]);
-    await commitBinding("binding sequence bump");
+    await conn.query("UPDATE calendar_binding SET external_uid = ? WHERE id = ?", [
+      "evt-binding-moved@example.com",
+      id,
+    ]);
+    await commitBinding("binding external uid edit");
     const changed = await detectChanges(conn, "calendar_binding", cursor);
     expect(changed.state === "ok" && changed.changedIds).toEqual([id]);
   });

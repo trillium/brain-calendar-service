@@ -24,28 +24,21 @@ type DetectionState =
 type DiffRow = RowDataPacket;
 
 // The columns whose change means something for the calendar, per table. Bookkeeping
-// columns (created_at, updated_at, last_synced_commit_hash) are left out on purpose:
+// columns (created_at, updated_at, external_sequence and the last_synced_* columns)
+// are left out on purpose: they are what a sync writes when it records a round, and
 // recording a sync is not an edit. A table not listed here is a period-shaped table.
 const PERIOD_COLUMNS = ["period_start_utc", "period_end_utc"] as const;
 const WATCHED_COLUMNS: Record<string, readonly string[]> = {
   calendar_period: PERIOD_COLUMNS,
-  calendar_binding: [
-    "bead_id",
-    "calendar_id",
-    "external_uid",
-    "external_sequence",
-    "last_synced_etag",
-    "last_synced_dtstamp",
-    "ownership_token",
-  ],
+  calendar_binding: ["bead_id", "calendar_id", "external_uid", "ownership_token"],
 };
 
 /**
  * Which rows changed between `fromCommit` and HEAD, and whether any of those
  * changes are actually temporal.
  *
- * A row whose ONLY change is to a column that is not watched for its table produces zero calendar
- * writes: renaming a period or re-linking it to a different bead does not move
+ * A row whose ONLY change is to a column that is not watched for its table produces
+ * zero calendar writes: renaming a period or recording a sync round does not move
  * anything on anybody's calendar, and treating it as a change is how a sync
  * engine starts writing events nobody edited.
  */

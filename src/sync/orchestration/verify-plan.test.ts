@@ -7,7 +7,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const verify = (providerCalls: { method: string }[]) => {
+const HASHES = { calendar_period: "p", calendar_binding: "b", calendar_sync_cursor: "c" };
+
+const verify = (
+  providerCalls: { method: string }[],
+  tableHashesAfter: Record<string, string> = HASHES,
+) => {
   const file = join(mkdtempSync(join(tmpdir(), "verify-plan-")), "plan.json");
   writeFileSync(
     file,
@@ -19,6 +24,8 @@ const verify = (providerCalls: { method: string }[]) => {
       quarantined: [],
       observations: {
         rowDeltas: { calendar_period: 0, calendar_binding: 0 },
+        tableHashesBefore: HASHES,
+        tableHashesAfter,
         providerCalls,
         doltHeadBefore: "abc",
         doltHeadAfter: "abc",
@@ -46,10 +53,25 @@ describe("sync:verify-plan provider-call check", () => {
     "move",
     "POST",
     "PUT",
+    "PATCH",
     "DELETE",
   ])("fails a recorded %s", (method) => {
     const result = verify([{ method }]);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(`mutating provider call: ${method}`);
+  });
+
+  it("passes a read-only verb that merely starts like a mutating one", () => {
+    expect(verify([{ method: "updates" }]).status).toBe(0);
+  });
+});
+
+describe("sync:verify-plan working-set check", () => {
+  it("fails when an observed table's working-set hash moved", () => {
+    const result = verify([], { ...HASHES, calendar_sync_cursor: "c2" });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "dry-run modified calendar_sync_cursor in the Dolt working set",
+    );
   });
 });

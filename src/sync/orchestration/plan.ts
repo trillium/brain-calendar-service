@@ -7,6 +7,8 @@
 // promises:
 //
 //   rowDeltas      per affected table, before and after
+//   table hashes   the working-set hash of each observed table, before and after,
+//                  so an UPDATE or an uncommitted write shows even when counts match
 //   providerCalls  every method the transport was asked to make
 //   dolt head      the Dolt branch head before and after
 //
@@ -43,6 +45,8 @@ interface Quarantine {
 
 interface Observations {
   rowDeltas: Record<string, number>;
+  tableHashesBefore: Record<string, string>;
+  tableHashesAfter: Record<string, string>;
   providerCalls: { method: string }[];
   doltHeadBefore: string | null;
   doltHeadAfter: string | null;
@@ -61,6 +65,7 @@ interface SyncPlan {
 }
 
 const TEMPORAL_TABLES = ["calendar_period", "calendar_binding"] as const;
+const OBSERVED_TABLES = [...TEMPORAL_TABLES, "calendar_sync_cursor"] as const;
 
 const tableCount = async (conn: Connection, table: string): Promise<number> => {
   const [rows] = await conn.query<RowDataPacket[]>(`SELECT COUNT(*) AS n FROM \`${table}\``);
@@ -71,6 +76,15 @@ const tableCounts = async (conn: Connection): Promise<Record<string, number>> =>
   const counts: Record<string, number> = {};
   for (const table of TEMPORAL_TABLES) counts[table] = await tableCount(conn, table);
   return counts;
+};
+
+const tableHashes = async (conn: Connection): Promise<Record<string, string>> => {
+  const hashes: Record<string, string> = {};
+  for (const table of OBSERVED_TABLES) {
+    const [rows] = await conn.query<RowDataPacket[]>("SELECT DOLT_HASHOF_TABLE(?) AS h", [table]);
+    hashes[table] = String(rows[0].h);
+  }
+  return hashes;
 };
 
 interface CycleInput {
@@ -87,6 +101,7 @@ interface CycleInput {
 /** Build the plan. Writes nothing, including in dry-run. */
 export const buildSyncPlan = async (input: CycleInput): Promise<SyncPlan> => {
   const countsBefore = await tableCounts(input.conn);
+  const tableHashesBefore = await tableHashes(input.conn);
   const doltHeadBefore = await headCommit(input.conn);
   const policy: SyncPolicy = allow(input.provider, [
     [input.calendarId, "INSERT"],
@@ -139,6 +154,7 @@ export const buildSyncPlan = async (input: CycleInput): Promise<SyncPlan> => {
 
   const providerCalls = [...(await input.providerCalls())];
   const countsAfter = await tableCounts(input.conn);
+  const tableHashesAfter = await tableHashes(input.conn);
   const rowDeltas: Record<string, number> = {};
   for (const table of TEMPORAL_TABLES) {
     rowDeltas[table] = countsAfter[table] - countsBefore[table];
@@ -155,6 +171,8 @@ export const buildSyncPlan = async (input: CycleInput): Promise<SyncPlan> => {
     conflictsQuarantined: quarantined.length,
     observations: {
       rowDeltas,
+      tableHashesBefore,
+      tableHashesAfter,
       providerCalls,
       doltHeadBefore,
       doltHeadAfter: await headCommit(input.conn),
