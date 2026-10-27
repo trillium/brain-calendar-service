@@ -10,6 +10,7 @@ import { commitTables, nowSql } from "./apply-store.js";
 const ER_DUP_ENTRY = 1062;
 
 export interface PullBinding {
+  readonly id: number;
   readonly beadId: string;
   readonly externalUid: string;
   readonly sequence: number;
@@ -22,11 +23,12 @@ export const loadBindings = async (
   calendarId: number,
 ): Promise<readonly PullBinding[]> => {
   const [rows] = await conn.query<RowDataPacket[]>(
-    `SELECT bead_id, external_uid, external_sequence, last_synced_etag, ownership_token
+    `SELECT id, bead_id, external_uid, external_sequence, last_synced_etag, ownership_token
        FROM calendar_binding WHERE calendar_id = ? ORDER BY id`,
     [calendarId],
   );
   return rows.map((r) => ({
+    id: Number(r.id),
     beadId: String(r.bead_id),
     externalUid: String(r.external_uid),
     sequence: Number(r.external_sequence),
@@ -34,6 +36,59 @@ export const loadBindings = async (
     ownershipToken: (r.ownership_token as string | null) ?? null,
   }));
 };
+
+/**
+ * Whether the period differs from what it was at the commit that last wrote its
+ * binding. Every binding write (create, push, pull, refresh) commits alongside or
+ * after the period content it agreed with, so that commit is the last sync.
+ */
+export const changedSinceSync = async (
+  conn: Connection,
+  bindingId: number,
+  periodId: number,
+): Promise<boolean> => {
+  const [synced] = await conn.query<RowDataPacket[]>(
+    `SELECT to_commit FROM dolt_diff_calendar_binding
+      WHERE to_id = ? AND to_commit <> 'WORKING' ORDER BY to_commit_date DESC LIMIT 1`,
+    [bindingId],
+  );
+  const commit = synced[0]?.to_commit as string | undefined;
+  if (commit === undefined) return true;
+  const [diff] = await conn.query<RowDataPacket[]>(
+    `SELECT COUNT(*) AS n FROM DOLT_DIFF(?, 'WORKING', 'calendar_period')
+      WHERE from_id = ? OR to_id = ?`,
+    [commit, periodId, periodId],
+  );
+  return Number(diff[0]?.n) > 0;
+};
+
+interface RefreshedBinding {
+  readonly beadId: string;
+  readonly calendarId: number;
+  readonly etag: string;
+  /** The remote's `updated`, already a DATETIME string. */
+  readonly dtstamp: string;
+  readonly syncedAt: string;
+}
+
+/** Record the provider copy an in-sync binding now agrees with. One commit, binding only. */
+export const refreshBinding = (conn: Connection, refresh: RefreshedBinding): Promise<void> =>
+  commitTables(conn, ["calendar_binding"], `apply: refresh ${refresh.beadId}`, async () => {
+    await conn.query(
+      `UPDATE calendar_binding
+          SET last_synced_commit_hash = ?, last_synced_etag = ?, last_synced_dtstamp = ?,
+              updated_at = ?
+        WHERE bead_id = ? AND calendar_id = ?`,
+      [
+        refresh.syncedAt,
+        refresh.etag,
+        refresh.dtstamp,
+        nowSql(),
+        refresh.beadId,
+        refresh.calendarId,
+      ],
+    );
+  });
 
 const toSql = (utc: string): string => utc.slice(0, 19).replace("T", " ");
 

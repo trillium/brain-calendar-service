@@ -9,6 +9,8 @@
 // The pull half runs first and touches only Dolt: each planned pull is one commit
 // moving a calendar_period row to what the provider holds. A pull that cannot be
 // applied (the period moved locally in the meantime, say) is a skip like any other.
+// An in-sync event whose etag moved has that etag recorded on its binding, so the
+// binding keeps naming the provider copy the service last agreed with.
 //
 // Order of effects for a create, and why:
 //
@@ -23,7 +25,7 @@
 import type { Connection } from "mysql2/promise";
 import type { CalendarProvider } from "../../adapters/provider.js";
 import { allow, type SyncPolicy } from "../loop/policy.js";
-import { applyPull } from "./apply-pull.js";
+import { applyPull, applyRefresh } from "./apply-pull.js";
 import {
   applyOne,
   type Context,
@@ -57,6 +59,7 @@ interface ApplyInput {
 
 interface Counts {
   pulled: number;
+  refreshed: number;
   created: number;
   updated: number;
   adopted: number;
@@ -159,6 +162,11 @@ const applyAll = async (ctx: Context, counts: Counts): Promise<number> => {
       commits += 1;
     }
   }
+  for (const refresh of ctx.plan.refresh) {
+    await inItem(refresh.beadId, () => applyRefresh(ctx, refresh));
+    counts.refreshed += 1;
+    commits += 1;
+  }
   for (const push of ctx.plan.push) {
     const outcome = await inItem(push.beadId, () => applyOne(ctx, push));
     if (typeof outcome !== "string") counts.skipped.push(outcome);
@@ -190,6 +198,7 @@ const holdConflicts = async (input: ApplyInput): Promise<void> => {
 export const applyPlan = async (input: ApplyInput): Promise<ApplyResult> => {
   const counts: Counts = {
     pulled: 0,
+    refreshed: 0,
     created: 0,
     updated: 0,
     adopted: 0,

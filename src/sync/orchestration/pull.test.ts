@@ -2,7 +2,7 @@
 // Stage C: the pull half and the self-echo drop, against a real (disposable) Dolt
 // database and the stateful fake gog. No real gog and no real calendar is reached.
 
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { RowDataPacket } from "mysql2";
@@ -95,6 +95,25 @@ const day = (n: number, summary: string) => ({
 /** A third party editing an event on the provider: not this service, so not through the sync. */
 const editRemotely = (eventId: string, draft: object) =>
   provider().updateEvent(pushPolicy("google", THROWAWAY), THROWAWAY, eventId, draft);
+
+/** A third party deleting an event on the provider, straight from the fake's state. */
+const deleteRemotely = (eventId: string) => {
+  const next = state();
+  delete next.calendars[THROWAWAY][eventId];
+  writeFileSync(join(dir, "state.json"), JSON.stringify(next));
+};
+
+const failingOn = (fragment: string): Connection =>
+  new Proxy(conn, {
+    get(target, prop) {
+      const value = Reflect.get(target, prop);
+      if (prop !== "query") return typeof value === "function" ? value.bind(target) : value;
+      return (sql: string, ...rest: unknown[]) =>
+        sql.includes(fragment)
+          ? Promise.reject(new Error(`${fragment} lost`))
+          : target.query(sql, ...(rest as []));
+    },
+  });
 
 const round = (over: { conn?: Connection; provider?: CalendarProvider; dryRun?: boolean } = {}) =>
   runRound({
@@ -241,8 +260,13 @@ describe("the provider handing back our own write is dropped", () => {
     await editRemotely(uid, { summary: "standup (renamed on the provider)" });
     const touched = await round();
     expect(touched.plan.pull).toHaveLength(0);
-    expect(applied(touched)).toMatchObject({ state: "ok", pulled: 0, updated: 0 });
-    expect(await logLength()).toBe(logBefore);
+    expect(applied(touched)).toMatchObject({ state: "ok", pulled: 0, updated: 0, refreshed: 1 });
+    expect(await logLength()).toBe(logBefore + 1);
+    expect((await binding()).last_synced_etag).toBe(remoteEvents()[0]?.etag);
+
+    const settled = await round();
+    expect(applied(settled)).toMatchObject({ state: "ok", pulled: 0, updated: 0, refreshed: 0 });
+    expect(await logLength()).toBe(logBefore + 1);
   });
 
   it("treats an unpushed local edit as a push, not as the provider's edit", async () => {
@@ -286,6 +310,88 @@ describe("an edit on both sides in one round", () => {
     expect(failedOf(applied(second)).kind).toBe("quarantined");
     expect(await conflicts()).toHaveLength(1);
     expect(await cursor()).toBe(before);
+  });
+});
+
+describe("a remote edit to a period already pushed, while the cursor is held", () => {
+  const idOf = (summary: string) => remoteEvents().find((e) => e.summary === summary)?.id as string;
+
+  it("is pulled, not quarantined, after a round whose next create failed", async () => {
+    await store.addPeriods([day(1, "standup"), day(2, "review")]);
+    process.env.FAKE_GOG_FAIL_NTH = "create:2";
+    expect(failedOf(applied(await round()))).toMatchObject({ kind: "provider", created: 1 });
+    process.env.FAKE_GOG_FAIL_NTH = "";
+    await editRemotely(idOf("standup"), EDITED);
+
+    const next = await round();
+    expect(next.plan.conflicts).toBe(0);
+    expect(next.plan.pull).toHaveLength(1);
+    expect(next.plan.push.map((p) => p.beadId)).not.toContain("row:calendar_period:1");
+    expect(applied(next)).toMatchObject({ state: "ok", pulled: 1, created: 1, updated: 0 });
+    expect(await period(1)).toMatchObject({ start_utc: EDITED.from, end_utc: EDITED.to });
+    expect(await conflicts()).toHaveLength(0);
+  });
+
+  it("is pulled, not quarantined, while a deleted event keeps every round incomplete", async () => {
+    await store.addPeriods([day(1, "standup"), day(2, "review")]);
+    await round();
+    deleteRemotely(idOf("review"));
+    await store.movePeriod("standup", "2026-04-01T12:00:00Z");
+    expect(applied(await round())).toMatchObject({ state: "incomplete", updated: 1 });
+    await editRemotely(idOf("standup"), EDITED);
+
+    const next = await round();
+    expect(next.plan.conflicts).toBe(0);
+    expect(applied(next)).toMatchObject({ state: "incomplete", pulled: 1, updated: 0 });
+    expect(await period(1)).toMatchObject({ start_utc: EDITED.from, end_utc: EDITED.to });
+    expect(await conflicts()).toHaveLength(0);
+  });
+});
+
+describe("an event already in sync whose etag moved", () => {
+  const pushedTo = async (start: string, end: string) => {
+    const next = await round();
+    expect(next.plan.conflicts).toBe(0);
+    expect(applied(next)).toMatchObject({ state: "ok", updated: 1 });
+    expect(remoteEvents()[0]?.start.dateTime).toBe(start);
+    expect(await period()).toMatchObject({ start_utc: start, end_utc: end });
+  };
+
+  it("records the etag when the binding write after a landed update failed", async () => {
+    await store.addPeriods([day(1, "standup")]);
+    await round();
+    await store.movePeriod("standup", "2026-04-01T12:00:00Z");
+    const crashed = await round({ conn: failingOn("UPDATE calendar_binding") });
+    expect(failedOf(applied(crashed))).toMatchObject({ kind: "store" });
+    expect(remoteEvents()[0]?.start.dateTime).toBe("2026-04-01T12:00:00Z");
+    expect((await binding()).last_synced_etag).not.toBe(remoteEvents()[0]?.etag);
+
+    const healed = await round();
+    expect(healed.plan.push).toHaveLength(0);
+    expect(applied(healed)).toMatchObject({ state: "ok", refreshed: 1, updated: 0 });
+    expect((await binding()).last_synced_etag).toBe(remoteEvents()[0]?.etag);
+
+    await store.movePeriod("standup", "2026-04-01T14:00:00Z");
+    await pushedTo("2026-04-01T14:00:00Z", "2026-04-01T15:00:00Z");
+  });
+
+  it("records the etag when both sides moved it to the same time", async () => {
+    await store.addPeriods([day(1, "standup")]);
+    await round();
+    await store.movePeriod("standup", "2026-04-01T12:00:00Z");
+    await editRemotely(remoteEvents()[0]?.id as string, {
+      from: "2026-04-01T12:00:00Z",
+      to: "2026-04-01T13:00:00Z",
+    });
+
+    const same = await round();
+    expect(same.plan.push).toHaveLength(0);
+    expect(same.plan.pull).toHaveLength(0);
+    expect(applied(same)).toMatchObject({ state: "ok", refreshed: 1, updated: 0 });
+    expect((await binding()).last_synced_etag).toBe(remoteEvents()[0]?.etag);
+
+    await store.movePeriod("standup", "2026-04-01T14:00:00Z");
+    await pushedTo("2026-04-01T14:00:00Z", "2026-04-01T15:00:00Z");
   });
 });
 
@@ -437,18 +543,7 @@ describe("failure paths keep the cursor", () => {
     await pushedThenEdited();
     const before = await cursor();
     const etag = (await binding()).last_synced_etag;
-    const noPeriodWrites = new Proxy(conn, {
-      get(target, prop) {
-        const value = Reflect.get(target, prop);
-        if (prop !== "query") return typeof value === "function" ? value.bind(target) : value;
-        return (sql: string, ...rest: unknown[]) =>
-          sql.includes("UPDATE calendar_period")
-            ? Promise.reject(new Error("period write lost"))
-            : target.query(sql, ...(rest as []));
-      },
-    });
-
-    const broken = await round({ conn: noPeriodWrites });
+    const broken = await round({ conn: failingOn("UPDATE calendar_period") });
     expect(failedOf(applied(broken))).toMatchObject({ kind: "store", pulled: 0 });
     expect(failedOf(applied(broken)).at).toBe("row:calendar_period:1");
     expect(await period()).toMatchObject({ start_utc: "2026-04-01T10:00:00Z" });

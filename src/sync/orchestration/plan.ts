@@ -24,6 +24,7 @@ import { detectChanges, headCommit } from "../changedetection/plan.js";
 import { allow, assertPermitted, type SyncPolicy } from "../loop/policy.js";
 import { planPulls } from "./plan-pull.js";
 import {
+  type BindingRefresh,
   type ForeignEvent,
   NO_OBSERVATION,
   type PlanPull,
@@ -54,6 +55,8 @@ export interface SyncPlan {
   cursorAfter: string | null;
   push: PlanPush[];
   pull: PlanPull[];
+  /** In-sync bindings whose provider etag moved; apply records the new one. */
+  refresh: readonly BindingRefresh[];
   quarantined: Quarantine[];
   conflictsQuarantined: number;
   /** Edits made on both sides at once; each is also in `quarantined`. */
@@ -122,6 +125,9 @@ export const buildSyncPlan = async (input: CycleInput): Promise<SyncPlan> => {
   const cursorBefore = (cursorRows[0]?.last_synced_commit_hash as string | null) ?? null;
 
   const observed = input.pull ?? NO_OBSERVATION;
+  const pulled = planPulls(observed.changes);
+  if (pulled.pull.length > 0) assertPermitted(policy, input.calendarId, "UPDATE");
+  const pulledIds = new Set(pulled.pull.map((p) => p.beadId));
   const push: PlanPush[] = [];
   const quarantined: Quarantine[] = [];
 
@@ -136,15 +142,14 @@ export const buildSyncPlan = async (input: CycleInput): Promise<SyncPlan> => {
     for (const id of detection.changedIds) {
       const beadId = `row:${table}:${id}`;
       // The provider already holds what Dolt holds (a pulled edit shows up in the
-      // diff until the cursor passes it): pushing it back would be an echo.
-      if (observed.inSync.has(beadId)) continue;
+      // diff until the cursor passes it), or is about to be pulled from: pushing
+      // it back would be an echo.
+      if (observed.inSync.has(beadId) || pulledIds.has(beadId)) continue;
       assertPermitted(policy, input.calendarId, "INSERT");
       push.push({ beadId, externalUid: "", reason: "temporal change detected" });
     }
   }
 
-  const pulled = planPulls(observed.changes, new Set(push.map((p) => p.beadId)));
-  if (pulled.pull.length > 0) assertPermitted(policy, input.calendarId, "UPDATE");
   quarantined.push(...pulled.quarantined);
 
   const providerCalls = [...(await input.providerCalls())];
@@ -162,6 +167,7 @@ export const buildSyncPlan = async (input: CycleInput): Promise<SyncPlan> => {
     cursorAfter: cursorBefore,
     push,
     pull: pulled.pull,
+    refresh: observed.refresh,
     quarantined,
     conflictsQuarantined: quarantined.length,
     conflicts: pulled.quarantined.length,

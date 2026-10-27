@@ -2,8 +2,8 @@
 // back into the only four things it can be. This reads and writes nothing, so a
 // dry-run may call it.
 //
-//   in sync    a bound event whose times already match Dolt: nothing to do, and a
-//              push for the same period would be a no-op
+//   in sync    a bound event whose times already match Dolt: nothing to pull, and a
+//              push for the same period would be a no-op. A moved etag is recorded
 //   unchanged  a bound event whose etag is the one we recorded when we last wrote
 //              it: the provider handing our own write back (self-echo). Dropped.
 //   edited     a bound event whose times differ and whose etag moved: somebody
@@ -17,11 +17,24 @@
 
 import type { Connection } from "mysql2/promise";
 import type { CalendarProvider, ProviderEvent } from "../../adapters/provider.js";
-import { FULL_WINDOW, MARKER_KEY, periodBeadId, periodIdOf } from "./apply-draft.js";
+import {
+  FULL_WINDOW,
+  MARKER_KEY,
+  type PeriodRow,
+  periodBeadId,
+  periodIdOf,
+} from "./apply-draft.js";
 import { viaProvider, viaStore } from "./apply-steps.js";
 import { loadPeriod } from "./apply-store.js";
-import { loadBindings, type PullBinding } from "./pull-store.js";
-import type { ForeignEvent, PullObservation, RemoteChange, Skipped, Times } from "./pull-types.js";
+import { changedSinceSync, loadBindings, type PullBinding } from "./pull-store.js";
+import type {
+  BindingRefresh,
+  ForeignEvent,
+  PullObservation,
+  RemoteChange,
+  Skipped,
+  Times,
+} from "./pull-types.js";
 
 interface Input {
   readonly conn: Connection;
@@ -34,6 +47,7 @@ interface Sink {
   foreign: ForeignEvent[];
   skipped: Skipped[];
   inSync: Set<string>;
+  refresh: BindingRefresh[];
 }
 
 /** A UTC instant to the second, or null for an all-day or malformed time. */
@@ -73,6 +87,44 @@ const classifyUnbound = async (input: Input, event: ProviderEvent, out: Sink): P
   });
 };
 
+/** In sync. An etag that moved anyway is recorded, so the binding names the copy we agree with. */
+const markInSync = (
+  event: ProviderEvent,
+  binding: PullBinding,
+  periodId: number,
+  out: Sink,
+): void => {
+  out.inSync.add(periodBeadId(periodId));
+  if (event.etag === undefined || event.etag === binding.etag) return;
+  out.refresh.push({ beadId: binding.beadId, etag: event.etag, updated: event.updated ?? null });
+};
+
+const remoteChange = async (
+  input: Input,
+  event: ProviderEvent,
+  binding: PullBinding,
+  period: PeriodRow,
+  times: Times,
+): Promise<RemoteChange> => ({
+  beadId: periodBeadId(period.id),
+  periodId: period.id,
+  externalUid: event.id,
+  sequence: binding.sequence,
+  localPending: await viaStore(() => changedSinceSync(input.conn, binding.id, period.id)),
+  local: {
+    startUtc: period.startUtc,
+    endUtc: period.endUtc,
+    summary: period.summary,
+    updatedUtc: period.updatedUtc,
+  },
+  remote: {
+    ...times,
+    summary: event.summary ?? "",
+    etag: event.etag ?? null,
+    updated: event.updated ?? null,
+  },
+});
+
 const classifyBound = async (
   input: Input,
   event: ProviderEvent,
@@ -94,7 +146,7 @@ const classifyBound = async (
   }
   const times = remoteTimes(event);
   if (times?.startUtc === period.startUtc && times.endUtc === period.endUtc) {
-    out.inSync.add(periodBeadId(periodId));
+    markInSync(event, binding, periodId, out);
     return;
   }
   if (event.etag !== undefined && event.etag === binding.etag) return;
@@ -105,24 +157,7 @@ const classifyBound = async (
     });
     return;
   }
-  out.changes.push({
-    beadId: periodBeadId(periodId),
-    periodId,
-    externalUid: event.id,
-    sequence: binding.sequence,
-    local: {
-      startUtc: period.startUtc,
-      endUtc: period.endUtc,
-      summary: period.summary,
-      updatedUtc: period.updatedUtc,
-    },
-    remote: {
-      ...times,
-      summary: event.summary ?? "",
-      etag: event.etag ?? null,
-      updated: event.updated ?? null,
-    },
-  });
+  out.changes.push(await remoteChange(input, event, binding, period, times));
 };
 
 /** Read the calendar once and sort every event. Provider errors leave as StepFailure. */
@@ -134,7 +169,7 @@ export const observePull = async (input: Input): Promise<PullObservation> => {
   const bindings = new Map(
     (await viaStore(() => loadBindings(conn, calendar.id))).map((b) => [b.externalUid, b]),
   );
-  const out: Sink = { changes: [], foreign: [], skipped: [], inSync: new Set() };
+  const out: Sink = { changes: [], foreign: [], skipped: [], inSync: new Set(), refresh: [] };
   const seen = new Set<string>();
   for (const event of events.filter((e) => e.status !== "cancelled")) {
     const binding = bindings.get(event.id);

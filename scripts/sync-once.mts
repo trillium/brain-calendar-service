@@ -73,8 +73,8 @@ const describeOutcome = (result: ApplyResult): string => {
 };
 
 const describeApply = (result: ApplyResult): string =>
-  `apply ${result.state} pulled=${result.pulled} created=${result.created} ` +
-  `updated=${result.updated} adopted=${result.adopted} skipped=${result.skipped.length}` +
+  `apply ${result.state} pulled=${result.pulled} refreshed=${result.refreshed} ` +
+  `created=${result.created} updated=${result.updated} adopted=${result.adopted} skipped=${result.skipped.length}` +
   describeOutcome(result);
 
 const describeObservations = (plan: SyncPlan): string[] => [

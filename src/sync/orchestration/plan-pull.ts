@@ -3,8 +3,8 @@
 //
 // Dolt is the organizer, so only Dolt assigns SEQUENCE. A remote client cannot
 // bump it, which makes a remote edit "the next revision after the last one we
-// wrote": binding sequence + 1. A period with an unpushed local edit is also the
-// next revision. When both sides hold a next revision nobody can say which one was
+// wrote": binding sequence + 1. A period changed locally since its binding was
+// last written is also the next revision. When both sides hold a next revision nobody can say which one was
 // made knowing about the other, and a pull would overwrite a local edit while a
 // push would overwrite a remote one. Neither is undone by the loser's author, so
 // that pair is quarantined, with what RFC 5546 would have picked kept beside it.
@@ -56,14 +56,10 @@ const toPull = (change: RemoteChange, reason: string): PlanPull => ({
   updated: change.remote.updated,
 });
 
-/** `pending` is every period the plan will push: its local edit is not yet on the provider. */
-export const planPulls = (
-  changes: readonly RemoteChange[],
-  pending: ReadonlySet<string>,
-): PulledPlan => {
+export const planPulls = (changes: readonly RemoteChange[]): PulledPlan => {
   const out: { pull: PlanPull[]; quarantined: Quarantine[] } = { pull: [], quarantined: [] };
   for (const change of changes) {
-    const isPending = pending.has(change.beadId);
+    const isPending = change.localPending;
     const local = localOccurrence(change, change.sequence + (isPending ? 1 : 0));
     const remote = remoteOccurrence(change);
     const decision = resolve(local, remote);

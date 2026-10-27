@@ -20,6 +20,8 @@ export interface RemoteChange {
   readonly externalUid: string;
   /** The binding's external_sequence: the last SEQUENCE this service assigned. */
   readonly sequence: number;
+  /** The period changed in Dolt since the commit that last wrote its binding. */
+  readonly localPending: boolean;
   readonly local: Times & { readonly summary: string; readonly updatedUtc: string };
   readonly remote: Times & {
     readonly summary: string;
@@ -34,12 +36,20 @@ export interface ForeignEvent {
   readonly reason: string;
 }
 
+/** An in-sync event whose etag moved: the binding records the copy it now agrees with. */
+export interface BindingRefresh {
+  readonly beadId: string;
+  readonly etag: string;
+  readonly updated: string | null;
+}
+
 export interface PullObservation {
   readonly changes: readonly RemoteChange[];
   readonly foreign: readonly ForeignEvent[];
   readonly skipped: readonly Skipped[];
   /** Beads whose remote copy already says what Dolt says. */
   readonly inSync: ReadonlySet<string>;
+  readonly refresh: readonly BindingRefresh[];
 }
 
 export const NO_OBSERVATION: PullObservation = {
@@ -47,6 +57,7 @@ export const NO_OBSERVATION: PullObservation = {
   foreign: [],
   skipped: [],
   inSync: new Set(),
+  refresh: [],
 };
 
 export interface PlanPull {

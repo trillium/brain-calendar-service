@@ -9,8 +9,8 @@
 import type { Context } from "./apply-steps.js";
 import { viaStore } from "./apply-steps.js";
 import { doltHead, sqlStamp } from "./apply-store.js";
-import { type PulledEdit, writePulledEdit } from "./pull-store.js";
-import type { PlanPull, Skipped } from "./pull-types.js";
+import { type PulledEdit, refreshBinding, writePulledEdit } from "./pull-store.js";
+import type { BindingRefresh, PlanPull, Skipped } from "./pull-types.js";
 
 export const applyPull = async (ctx: Context, pull: PlanPull): Promise<"pulled" | Skipped> => {
   const reason = await viaStore(async () => {
@@ -29,3 +29,14 @@ export const applyPull = async (ctx: Context, pull: PlanPull): Promise<"pulled" 
   });
   return reason === null ? "pulled" : { beadId: pull.beadId, reason };
 };
+
+export const applyRefresh = (ctx: Context, refresh: BindingRefresh): Promise<void> =>
+  viaStore(async () =>
+    refreshBinding(ctx.conn, {
+      beadId: refresh.beadId,
+      calendarId: ctx.calendar.id,
+      etag: refresh.etag,
+      dtstamp: sqlStamp(refresh.updated ?? undefined),
+      syncedAt: await doltHead(ctx.conn),
+    }),
+  );
