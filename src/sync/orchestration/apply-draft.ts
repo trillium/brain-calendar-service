@@ -21,7 +21,18 @@ export interface PeriodRow {
   readonly startUtc: string;
   readonly endUtc: string;
   readonly summary: string;
+  /** When the row was last written, as a UTC instant; this is the local side's DTSTAMP. */
+  readonly updatedUtc: string;
 }
+
+const PERIOD_BEAD = /^row:calendar_period:(\d+)$/;
+
+/** The plan names a period by the row it changed; this is that name, and its inverse. */
+export const periodBeadId = (periodId: number): string => `row:calendar_period:${periodId}`;
+export const periodIdOf = (beadId: string): number | null => {
+  const match = PERIOD_BEAD.exec(beadId);
+  return match === null ? null : Number(match[1]);
+};
 
 /** The summary is attributes_json.summary, else the bead the period is linked to. */
 export const periodFromRow = (row: RowDataPacket): PeriodRow => {
@@ -36,6 +47,7 @@ export const periodFromRow = (row: RowDataPacket): PeriodRow => {
     startUtc: String(row.start_utc),
     endUtc: String(row.end_utc),
     summary: summary === "" ? `period ${row.id}` : summary,
+    updatedUtc: String(row.updated_utc),
   };
 };
 
@@ -49,7 +61,7 @@ export const draftFor = (period: PeriodRow): EventDraft => ({
 });
 
 /** Wide and explicit, so the search never depends on the provider's default range. */
-const MARKER_WINDOW = { from: "2000-01-01", to: "2100-01-01" } as const;
+export const FULL_WINDOW = { from: "2000-01-01", to: "2100-01-01" } as const;
 
 /**
  * Look for an event this service already created for `marker`, by the marker
@@ -63,7 +75,7 @@ export const findMarked = async (
   marker: string,
 ): Promise<ProviderEvent | null> => {
   const hits = await provider.listEvents(remoteCalendarId, {
-    ...MARKER_WINDOW,
+    ...FULL_WINDOW,
     privateProperty: { key: MARKER_KEY, value: marker },
   });
   for (const hit of hits) {

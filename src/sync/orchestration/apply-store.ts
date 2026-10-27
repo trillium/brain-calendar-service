@@ -14,15 +14,17 @@ export interface BindingRow {
   readonly ownershipToken: string | null;
 }
 
-const nowSql = (): string => new Date().toISOString().slice(0, 19).replace("T", " ");
+export const nowSql = (): string => new Date().toISOString().slice(0, 19).replace("T", " ");
 
-/** The remote's `updated` instant as a DATETIME, or now when it is absent or invalid. */
-const stampOf = (event: ProviderEvent): string => {
-  const parsed = event.updated === undefined ? Number.NaN : Date.parse(event.updated);
+/** An `updated` instant as a DATETIME, or now when it is absent or invalid. */
+export const sqlStamp = (updated: string | undefined): string => {
+  const parsed = updated === undefined ? Number.NaN : Date.parse(updated);
   return Number.isNaN(parsed)
     ? nowSql()
     : new Date(parsed).toISOString().slice(0, 19).replace("T", " ");
 };
+
+const stampOf = (event: ProviderEvent): string => sqlStamp(event.updated);
 
 // DATE_FORMAT in SQL, not the driver: without dateStrings mysql2 hands back a Date
 // built in the process's local zone, which would shift every UTC instant.
@@ -30,7 +32,8 @@ export const loadPeriod = async (conn: Connection, id: number): Promise<PeriodRo
   const [rows] = await conn.query<RowDataPacket[]>(
     `SELECT id, linked_bead_id, attributes_json,
             DATE_FORMAT(period_start_utc, '%Y-%m-%dT%H:%i:%sZ') AS start_utc,
-            DATE_FORMAT(period_end_utc, '%Y-%m-%dT%H:%i:%sZ') AS end_utc
+            DATE_FORMAT(period_end_utc, '%Y-%m-%dT%H:%i:%sZ') AS end_utc,
+            DATE_FORMAT(updated_at, '%Y-%m-%dT%H:%i:%sZ') AS updated_utc
        FROM calendar_period WHERE id = ?`,
     [id],
   );
@@ -66,23 +69,29 @@ export const logLength = async (conn: Connection): Promise<number> => {
   return Number(rows[0]?.n);
 };
 
-/** One SQL transaction for the binding write, then one Dolt commit of that table alone. */
-const commitBinding = async (
+/** One SQL transaction for the writes, then one Dolt commit of exactly the tables named. */
+export const commitTables = async <T>(
   conn: Connection,
+  tables: readonly string[],
   message: string,
-  work: () => Promise<void>,
-): Promise<void> => {
+  work: () => Promise<T>,
+): Promise<T> => {
+  let result: T;
   await conn.beginTransaction();
   try {
-    await work();
+    result = await work();
     await conn.commit();
   } catch (error) {
     await conn.rollback();
     throw error;
   }
-  await conn.query("CALL DOLT_ADD('calendar_binding')");
+  for (const table of tables) await conn.query("CALL DOLT_ADD(?)", [table]);
   await conn.query("CALL DOLT_COMMIT('--skip-empty', '-m', ?)", [message]);
+  return result;
 };
+
+const commitBinding = (conn: Connection, message: string, work: () => Promise<void>) =>
+  commitTables(conn, ["calendar_binding"], message, work);
 
 interface NewBinding {
   readonly beadId: string;

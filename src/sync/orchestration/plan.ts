@@ -20,26 +20,22 @@
 
 import type { RowDataPacket } from "mysql2";
 import type { Connection } from "mysql2/promise";
-import { resolve } from "../../domain/rfc5546/resolve.js";
-import type { Occurrence } from "../../domain/rfc5546/types.js";
 import { detectChanges, headCommit } from "../changedetection/plan.js";
 import { allow, assertPermitted, type SyncPolicy } from "../loop/policy.js";
+import { planPulls } from "./plan-pull.js";
+import {
+  type BindingRefresh,
+  type ForeignEvent,
+  NO_OBSERVATION,
+  type PlanPull,
+  type PullObservation,
+  type Quarantine,
+  type Skipped,
+} from "./pull-types.js";
 
 export interface PlanPush {
   beadId: string;
   externalUid: string;
-  reason: string;
-}
-
-interface PlanPull {
-  beadId: string;
-  externalUid: string;
-  reason: string;
-}
-
-interface Quarantine {
-  beadId: string | null;
-  externalUid: string | null;
   reason: string;
 }
 
@@ -59,8 +55,16 @@ export interface SyncPlan {
   cursorAfter: string | null;
   push: PlanPush[];
   pull: PlanPull[];
+  /** In-sync bindings whose provider etag moved; apply records the new one. */
+  refresh: readonly BindingRefresh[];
   quarantined: Quarantine[];
   conflictsQuarantined: number;
+  /** Edits made on both sides at once; each is also in `quarantined`. */
+  conflicts: number;
+  /** Provider events that are not ours: reported, never imported. */
+  foreign: readonly ForeignEvent[];
+  /** Remote edits that could not be pulled; the round that carries one is incomplete. */
+  pullSkipped: readonly Skipped[];
   observations: Observations;
 }
 
@@ -94,7 +98,8 @@ interface CycleInput {
   readonly conn: Connection;
   readonly calendarId: string;
   readonly provider: string;
-  readonly remoteChanges: readonly Occurrence[];
+  /** What the provider holds, from `observePull`. Absent means the pull half was not run. */
+  readonly pull?: PullObservation;
   /** True (the default) for a plan that will not be applied. */
   readonly dryRun?: boolean;
   /** Read once the plan is built, so it reports the calls actually made. */
@@ -119,8 +124,11 @@ export const buildSyncPlan = async (input: CycleInput): Promise<SyncPlan> => {
   );
   const cursorBefore = (cursorRows[0]?.last_synced_commit_hash as string | null) ?? null;
 
+  const observed = input.pull ?? NO_OBSERVATION;
+  const pulled = planPulls(observed.changes);
+  if (pulled.pull.length > 0) assertPermitted(policy, input.calendarId, "UPDATE");
+  const pulledIds = new Set(pulled.pull.map((p) => p.beadId));
   const push: PlanPush[] = [];
-  const pull: PlanPull[] = [];
   const quarantined: Quarantine[] = [];
 
   for (const table of TEMPORAL_TABLES) {
@@ -132,30 +140,17 @@ export const buildSyncPlan = async (input: CycleInput): Promise<SyncPlan> => {
       continue;
     }
     for (const id of detection.changedIds) {
+      const beadId = `row:${table}:${id}`;
+      // The provider already holds what Dolt holds (a pulled edit shows up in the
+      // diff until the cursor passes it), or is about to be pulled from: pushing
+      // it back would be an echo.
+      if (observed.inSync.has(beadId) || pulledIds.has(beadId)) continue;
       assertPermitted(policy, input.calendarId, "INSERT");
-      push.push({
-        beadId: `row:${table}:${id}`,
-        externalUid: "",
-        reason: "temporal change detected",
-      });
+      push.push({ beadId, externalUid: "", reason: "temporal change detected" });
     }
   }
 
-  for (const remote of input.remoteChanges) {
-    const local: Occurrence = { ...remote, source: "local" };
-    const decision = resolve(local, remote);
-    if (decision.reason === "different_object" || decision.reason === "different_occurrence") {
-      continue;
-    }
-    if (decision.conflicted && decision.winner?.source === "remote") {
-      assertPermitted(policy, input.calendarId, "UPDATE");
-      pull.push({
-        beadId: "",
-        externalUid: remote.uid,
-        reason: decision.reason,
-      });
-    }
-  }
+  quarantined.push(...pulled.quarantined);
 
   const providerCalls = [...(await input.providerCalls())];
   const countsAfter = await tableCounts(input.conn);
@@ -171,9 +166,13 @@ export const buildSyncPlan = async (input: CycleInput): Promise<SyncPlan> => {
     cursorBefore,
     cursorAfter: cursorBefore,
     push,
-    pull,
+    pull: pulled.pull,
+    refresh: observed.refresh,
     quarantined,
     conflictsQuarantined: quarantined.length,
+    conflicts: pulled.quarantined.length,
+    foreign: observed.foreign,
+    pullSkipped: observed.skipped,
     observations: {
       rowDeltas,
       tableHashesBefore,

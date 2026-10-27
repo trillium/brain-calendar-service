@@ -6,6 +6,12 @@
 // than turned into one. A round with any such skip is incomplete: the skips are
 // returned and the cursor stays, so the next round sees them again.
 //
+// The pull half runs first and touches only Dolt: each planned pull is one commit
+// moving a calendar_period row to what the provider holds. A pull that cannot be
+// applied (the period moved locally in the meantime, say) is a skip like any other.
+// An in-sync event whose etag moved has that etag recorded on its binding, so the
+// binding keeps naming the provider copy the service last agreed with.
+//
 // Order of effects for a create, and why:
 //
 //   1. look for an event already carrying this period's marker (adopt, never duplicate)
@@ -19,17 +25,19 @@
 import type { Connection } from "mysql2/promise";
 import type { CalendarProvider } from "../../adapters/provider.js";
 import { allow, type SyncPolicy } from "../loop/policy.js";
+import { applyPull, applyRefresh } from "./apply-pull.js";
 import {
   applyOne,
   type Context,
   type FailureKind,
   messageOf,
-  type Skipped,
   StepFailure,
   viaStore,
 } from "./apply-steps.js";
 import { doltHead, logLength, moveCursor } from "./apply-store.js";
 import type { SyncPlan } from "./plan.js";
+import { recordConflict } from "./pull-store.js";
+import type { Skipped } from "./pull-types.js";
 
 /** The only policy a push may run under: INSERT and UPDATE on one calendar. */
 export const pushPolicy = (provider: string, remoteCalendarId: string): SyncPolicy =>
@@ -45,9 +53,13 @@ interface ApplyInput {
   readonly policy: SyncPolicy;
   readonly calendar: { readonly id: number; readonly remoteCalendarId: string };
   readonly sourceDatabase: string;
+  /** Set when the provider could not be read: the round applies nothing and says why. */
+  readonly readFailure?: StepFailure;
 }
 
 interface Counts {
+  pulled: number;
+  refreshed: number;
   created: number;
   updated: number;
   adopted: number;
@@ -107,7 +119,8 @@ const failed = (
   cursorBefore: plan.cursorBefore,
 });
 
-const refusal = (plan: SyncPlan): StepFailure | null => {
+const refusal = (plan: SyncPlan, readFailure?: StepFailure): StepFailure | null => {
+  if (readFailure !== undefined) return readFailure;
   if (plan.conflictsQuarantined > 0) {
     return new StepFailure(
       "quarantined",
@@ -120,35 +133,103 @@ const refusal = (plan: SyncPlan): StepFailure | null => {
   return null;
 };
 
+/** A failure tagged with the item being applied when it happened. */
+class AtItem extends Error {
+  constructor(
+    readonly at: string,
+    readonly original: unknown,
+  ) {
+    super("step failed");
+  }
+}
+
+const inItem = async <T>(at: string, work: () => Promise<T>): Promise<T> => {
+  try {
+    return await work();
+  } catch (error) {
+    throw new AtItem(at, error);
+  }
+};
+
+/** Returns how many Dolt commits this step made, so the cursor can tell they were ours. */
+const applyAll = async (ctx: Context, counts: Counts): Promise<number> => {
+  let commits = 0;
+  for (const pull of ctx.plan.pull) {
+    const outcome = await inItem(pull.beadId, () => applyPull(ctx, pull));
+    if (typeof outcome !== "string") counts.skipped.push(outcome);
+    else {
+      counts.pulled += 1;
+      commits += 1;
+    }
+  }
+  for (const refresh of ctx.plan.refresh) {
+    await inItem(refresh.beadId, () => applyRefresh(ctx, refresh));
+    counts.refreshed += 1;
+    commits += 1;
+  }
+  for (const push of ctx.plan.push) {
+    const outcome = await inItem(push.beadId, () => applyOne(ctx, push));
+    if (typeof outcome !== "string") counts.skipped.push(outcome);
+    else {
+      counts[outcome] += 1;
+      if (outcome !== "unchanged") commits += 1;
+    }
+  }
+  return commits;
+};
+
+/** Quarantine writes the conflict down; it never resolves it, and it is the only sink. */
+const holdConflicts = async (input: ApplyInput): Promise<void> => {
+  for (const held of input.plan.quarantined) {
+    if (held.conflict === undefined) continue;
+    await viaStore(() =>
+      recordConflict(input.conn, {
+        calendarId: input.calendar.id,
+        beadId: held.beadId ?? "",
+        externalUid: held.externalUid ?? "",
+        reason: held.conflict?.code ?? "",
+        local: held.conflict?.local,
+        remote: held.conflict?.remote,
+      }),
+    );
+  }
+};
+
 export const applyPlan = async (input: ApplyInput): Promise<ApplyResult> => {
-  const counts: Counts = { created: 0, updated: 0, adopted: 0, unchanged: 0, skipped: [] };
-  const refused = refusal(input.plan);
-  if (refused !== null) return failed(counts, input.plan, refused, null);
+  const counts: Counts = {
+    pulled: 0,
+    refreshed: 0,
+    created: 0,
+    updated: 0,
+    adopted: 0,
+    unchanged: 0,
+    skipped: [...input.plan.pullSkipped],
+  };
+  const refused = refusal(input.plan, input.readFailure);
+  if (refused !== null) {
+    try {
+      await holdConflicts(input);
+    } catch (error) {
+      return failed(counts, input.plan, error, null);
+    }
+    return failed(counts, input.plan, refused, null);
+  }
   const ctx: Context = input;
   let logAtStart: number;
+  let commits: number;
   try {
     logAtStart = await viaStore(() => logLength(input.conn));
+    commits = await applyAll(ctx, counts);
   } catch (error) {
-    return failed(counts, input.plan, error, null);
-  }
-  let ownCommits = 0;
-  for (const push of input.plan.push) {
-    try {
-      const outcome = await applyOne(ctx, push);
-      if (typeof outcome !== "string") counts.skipped.push(outcome);
-      else {
-        counts[outcome] += 1;
-        if (outcome !== "unchanged") ownCommits += 1;
-      }
-    } catch (error) {
-      return failed(counts, input.plan, error, push.beadId);
-    }
+    return error instanceof AtItem
+      ? failed(counts, input.plan, error.original, error.at)
+      : failed(counts, input.plan, error, null);
   }
   if (counts.skipped.length > 0) {
     return { ...counts, state: "incomplete", cursorBefore: input.plan.cursorBefore };
   }
   try {
-    const target = await cursorTarget(ctx, logAtStart, ownCommits);
+    const target = await cursorTarget(ctx, logAtStart, commits);
     const moved = await viaStore(() =>
       moveCursor(input.conn, input.sourceDatabase, input.calendar.id, target),
     );

@@ -138,7 +138,6 @@ describe("tool writes reach the sync engine", () => {
         conn,
         calendarId: "1",
         provider: "google",
-        remoteChanges: [],
         providerCalls: () => [],
       });
       expect(plan.push.map((p) => p.beadId)).toEqual([

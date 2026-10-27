@@ -7,6 +7,9 @@
 // calendar id is its own namespace - so a test can prove a write
 // never reached a calendar it was not allowed to touch.
 //
+// Each write bumps the event's etag and moves its `updated` forward a second, so a
+// test can tell an event somebody edited from one nobody touched.
+//
 // FAKE_GOG_FAIL_NTH=<sub>:<n> makes the n-th call to that subcommand (counted
 // across processes, in the same file) exit 1, to exercise a mid-round failure.
 
@@ -29,8 +32,14 @@ const applyFlags = (event, args) => {
     const eq = prop.indexOf("=");
     event.extendedProperties.private[prop.slice(0, eq)] = prop.slice(eq + 1);
   }
-  event.updated = "2026-03-04T12:00:00.000Z";
+  if (args.includes("--all-day")) {
+    // An all-day event carries dates, not instants, as Google returns it.
+    if (from !== undefined) event.start = { date: from.slice(0, 10) };
+    if (to !== undefined) event.end = { date: to.slice(0, 10) };
+  }
   event.rev = (event.rev ?? 0) + 1;
+  // Every write moves `updated` forward a second, as a real clock would.
+  event.updated = new Date(Date.UTC(2026, 2, 4, 12, 0, event.rev)).toISOString();
   event.etag = `"etag-${event.id}-${event.rev}"`;
 };
 

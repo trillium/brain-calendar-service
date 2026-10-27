@@ -13,6 +13,7 @@ import {
   markerValue,
   OWNER_KEY,
   type PeriodRow,
+  periodIdOf,
 } from "./apply-draft.js";
 import {
   type BindingRow,
@@ -23,13 +24,9 @@ import {
   touchBinding,
 } from "./apply-store.js";
 import type { PlanPush, SyncPlan } from "./plan.js";
+import type { Skipped } from "./pull-types.js";
 
 export type FailureKind = "policy" | "provider" | "store" | "cursor" | "quarantined";
-
-export interface Skipped {
-  readonly beadId: string;
-  readonly reason: string;
-}
 
 /** A failure already classified by the step that raised it. */
 export class StepFailure extends Error {
@@ -42,14 +39,13 @@ export class StepFailure extends Error {
   }
 }
 
-const PERIOD_ROW = /^row:calendar_period:(\d+)$/;
 const BINDING_ROW = /^row:calendar_binding:\d+$/;
 const mintToken = (): string => randomBytes(24).toString("hex");
 export const messageOf = (error: unknown): string =>
   error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 
 /** Run a provider call; anything it throws becomes a typed failure, never an exception. */
-const viaProvider = async <T>(call: () => Promise<T>): Promise<T> => {
+export const viaProvider = async <T>(call: () => Promise<T>): Promise<T> => {
   try {
     return await call();
   } catch (error) {
@@ -128,9 +124,8 @@ const create = async (ctx: Context, beadId: string, period: PeriodRow): Promise<
 
 export const applyOne = async (ctx: Context, push: PlanPush): Promise<Outcome | Skipped> => {
   if (BINDING_ROW.test(push.beadId)) return "unchanged";
-  const match = PERIOD_ROW.exec(push.beadId);
-  if (match === null) return { beadId: push.beadId, reason: "not a calendar_period row" };
-  const periodId = Number(match[1]);
+  const periodId = periodIdOf(push.beadId);
+  if (periodId === null) return { beadId: push.beadId, reason: "not a calendar_period row" };
   const period = await viaStore(() => loadPeriod(ctx.conn, periodId));
   if (period === null) {
     return { beadId: push.beadId, reason: "period no longer exists; deletes are not applied" };

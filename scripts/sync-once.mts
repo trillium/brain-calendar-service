@@ -8,18 +8,24 @@
 // --calendar takes a store id (`3` or `cal-3`) or a remote calendar id registered
 // with `pnpm run calendar:register`. A dry-run writes nothing to Dolt and nothing
 // to a provider, and the plan it emits carries the OBSERVATIONS that prove it, not
-// a promise that it did. The live path builds the gog provider (GOG_ACCOUNT, and
-// GOG_BIN when gog is not on PATH), applies the plan's pushes to the registered
-// calendar only, and advances the cursor only after every push succeeded; a round
-// that had to skip a push it could not apply exits non-zero with the cursor held.
+// a promise that it did. A registered calendar is READ in both modes (listEvents,
+// through the gog provider: GOG_ACCOUNT, and GOG_BIN when gog is not on PATH), so
+// the plan shows the remote edits it would pull. The live path then writes pulled
+// edits into Dolt, applies pushes to the registered calendar only, and advances
+// the cursor only after every one succeeded; a round that had to skip something
+// exits non-zero with the cursor held. Events that are not ours are reported and
+// never imported. Each live round appends one line to evidence/soak/report.json.
 
+import { join } from "node:path";
 import { createConnection } from "mysql2/promise";
 import { resolveCalendar } from "../src/adapters/dolt/calendar-registry.ts";
-import { config } from "../src/adapters/dolt/config.mjs";
+import { config, ROOT } from "../src/adapters/dolt/config.mjs";
 import { gogProviderFromEnv } from "../src/adapters/gog/provider.ts";
 import { execRunner, recordingRunner } from "../src/adapters/gog/runner.ts";
-import { type ApplyResult, applyPlan, pushPolicy } from "../src/sync/orchestration/apply.ts";
-import { buildSyncPlan, SOURCE_DATABASE } from "../src/sync/orchestration/plan.ts";
+import type { ApplyResult } from "../src/sync/orchestration/apply.ts";
+import { SOURCE_DATABASE, type SyncPlan } from "../src/sync/orchestration/plan.ts";
+import { runRound } from "../src/sync/orchestration/round.ts";
+import { recordSoakRound, soakEntry } from "../src/sync/orchestration/soak.ts";
 
 const args = process.argv.slice(2);
 const flag = (n: string) => args.includes(`--${n}`);
@@ -29,6 +35,7 @@ const value = (n: string, fallback: string) => {
 };
 
 const PROVIDER = "google";
+const SOAK_REPORT = join(ROOT, "evidence", "soak", "report.json");
 const dryRun = flag("dry-run");
 const json = flag("json");
 const conn = await createConnection(config);
@@ -66,8 +73,15 @@ const describeOutcome = (result: ApplyResult): string => {
 };
 
 const describeApply = (result: ApplyResult): string =>
-  `apply ${result.state} created=${result.created} updated=${result.updated} ` +
-  `adopted=${result.adopted} skipped=${result.skipped.length}${describeOutcome(result)}`;
+  `apply ${result.state} pulled=${result.pulled} refreshed=${result.refreshed} ` +
+  `created=${result.created} updated=${result.updated} adopted=${result.adopted} skipped=${result.skipped.length}` +
+  describeOutcome(result);
+
+const describeObservations = (plan: SyncPlan): string[] => [
+  ...plan.foreign.map((f) => `foreign ${f.externalUid} (${f.summary ?? "no title"}): ${f.reason}`),
+  ...plan.pullSkipped.map((s) => `cannot pull ${s.beadId}: ${s.reason}`),
+  ...plan.quarantined.map((q) => `quarantined ${q.beadId ?? "-"}: ${q.reason}`),
+];
 
 try {
   const { id: calendarId, registered } = await resolveCalendar(
@@ -83,42 +97,33 @@ try {
   }
   if (!dryRun) await bootstrapCursor(calendarId);
 
-  // A pure dry-run asks gog for nothing, so the log is empty; a provider built
-  // here must take its runner from the recorder so the log stays real.
+  // The recorder wraps the runner, so the plan's provider-call log is what gog was
+  // really asked. A dry-run also asks gog for --readonly, a second line of defence.
   const recorder = recordingRunner(execRunner(process.env.GOG_BIN ?? "gog"));
-  const plan = await buildSyncPlan({
+  const provider =
+    registered === null
+      ? null
+      : gogProviderFromEnv(process.env, { runner: recorder.runner, readonly: dryRun });
+  const { plan, applied } = await runRound({
     conn,
-    calendarId: String(calendarId),
-    provider: PROVIDER,
-    remoteChanges: [],
-    providerCalls: () => recorder.calls,
+    provider,
+    calendar: { id: calendarId, registered },
     dryRun,
+    providerCalls: () => recorder.calls,
   });
-
-  // Every planned write carries its idempotency key, so a replay is safe.
-  plan.push = plan.push.map((p, i) => ({ ...p, idempotencyKey: `${p.beadId}:${i}` }));
-  plan.pull = plan.pull.map((p, i) => ({ ...p, idempotencyKey: `${p.externalUid}:${i}` }));
-
-  let applied: ApplyResult | null = null;
-  if (!dryRun && plan.conflictsQuarantined === 0 && registered !== null) {
-    applied = await applyPlan({
-      conn,
-      provider: gogProviderFromEnv(process.env, { runner: recorder.runner }),
-      plan,
-      policy: pushPolicy(registered.provider, registered.remoteCalendarId),
-      calendar: { id: calendarId, remoteCalendarId: registered.remoteCalendarId },
-      sourceDatabase: SOURCE_DATABASE,
-    });
-  }
+  const soak = applied === null ? null : recordSoakRound(SOAK_REPORT, soakEntry(plan, applied));
 
   if (json) {
     console.log(JSON.stringify(applied === null ? plan : { ...plan, apply: applied }, null, 2));
   } else {
     console.log(
       `sync:once calendar=${calendarId} dryRun=${dryRun} push=${plan.push.length} ` +
-        `pull=${plan.pull.length} conflicts_quarantined=${plan.conflictsQuarantined}`,
+        `pull=${plan.pull.length} conflicts_quarantined=${plan.conflictsQuarantined} ` +
+        `foreign=${plan.foreign.length}`,
     );
+    for (const line of describeObservations(plan)) console.log(`sync:once ${line}`);
     if (applied !== null) console.log(`sync:once ${describeApply(applied)}`);
+    if (soak !== null) console.log(`sync:once soak round ${soak.round} recorded in ${SOAK_REPORT}`);
   }
 
   if (!dryRun && plan.conflictsQuarantined > 0) {
