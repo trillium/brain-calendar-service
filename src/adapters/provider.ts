@@ -33,6 +33,8 @@ export interface ListWindow {
   readonly from?: string;
   readonly to?: string;
   readonly max?: number;
+  /** Server-side filter: only events carrying this private property value. */
+  readonly privateProperty?: { readonly key: string; readonly value: string };
 }
 
 export interface EventDraft {
