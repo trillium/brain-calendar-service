@@ -234,6 +234,16 @@ reported and never imported, and an edit made on both sides at once is written t
 A calendar with no cursor is baselined to the current Dolt head on its first live
 run, so a period must be proposed after that first run to be pushed.
 
+Two things to settle before the first live run (stage D):
+
+- Baselining: because of the line above, `propose_day` followed by the first live
+  `sync:once` pushes nothing. Run one live round first, then propose.
+- Self-echo assumes etags agree: the pull half calls a bound event unchanged when
+  its etag equals the one recorded from the create or update response. That assumes
+  `gog calendar events` reports the same etag as `create` and `update` do. This is
+  only proven against the fake gog. If live gog differs, a local edit not yet pushed can
+  be read as a concurrent edit and quarantined. Verify on the throwaway calendar.
+
 ### L4: the gog provider has never run against a live account
 
 Credentials are gog's job, so there is no token code to write here. What is
