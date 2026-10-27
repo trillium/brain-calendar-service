@@ -38,8 +38,8 @@ export const loadBindings = async (
 };
 
 /**
- * Whether the period differs from what it was at the commit that last wrote its
- * binding. Every binding write (create, push, pull, refresh) commits alongside or
+ * Whether the period's times differ from what they were at the commit that last
+ * wrote its binding: the same columns change detection watches. Every binding write (create, push, pull, refresh) commits alongside or
  * after the period content it agreed with, so that commit is the last sync.
  */
 export const changedSinceSync = async (
@@ -56,7 +56,9 @@ export const changedSinceSync = async (
   if (commit === undefined) return true;
   const [diff] = await conn.query<RowDataPacket[]>(
     `SELECT COUNT(*) AS n FROM DOLT_DIFF(?, 'WORKING', 'calendar_period')
-      WHERE from_id = ? OR to_id = ?`,
+      WHERE (from_id = ? OR to_id = ?)
+        AND NOT (from_period_start_utc <=> to_period_start_utc
+                 AND from_period_end_utc <=> to_period_end_utc)`,
     [commit, periodId, periodId],
   );
   return Number(diff[0]?.n) > 0;

@@ -332,6 +332,27 @@ describe("a remote edit to a period already pushed, while the cursor is held", (
     expect(await conflicts()).toHaveLength(0);
   });
 
+  it("is pulled, not quarantined, after a local edit that moved no time", async () => {
+    const uid = await pushedThenEdited();
+    await conn.query(
+      `UPDATE calendar_period SET attributes_json = ?, linked_bead_id = ?, updated_at = ?
+        WHERE id = 1`,
+      [
+        JSON.stringify({ summary: "standup (renamed)" }),
+        "standup (renamed)",
+        "2026-05-01 00:00:00",
+      ],
+    );
+    await conn.query("CALL DOLT_COMMIT('-am', 'rename standup')");
+
+    const next = await round();
+    expect(next.plan.conflicts).toBe(0);
+    expect(next.plan.pull).toEqual([expect.objectContaining({ externalUid: uid })]);
+    expect(applied(next)).toMatchObject({ state: "ok", pulled: 1, updated: 0 });
+    expect(await period(1)).toMatchObject({ start_utc: EDITED.from, end_utc: EDITED.to });
+    expect(await conflicts()).toHaveLength(0);
+  });
+
   it("is pulled, not quarantined, while a deleted event keeps every round incomplete", async () => {
     await store.addPeriods([day(1, "standup"), day(2, "review")]);
     await round();
