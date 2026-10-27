@@ -157,7 +157,7 @@ interface ConflictRecord {
   readonly remote: unknown;
 }
 
-/** Key order is the store's to choose (Dolt normalises JSON), so compare with sorted keys. */
+/** Key order is the store's to choose (Dolt normalizes JSON), so compare with sorted keys. */
 const canonicalJson = (value: unknown): string =>
   JSON.stringify(value, (_key, v) =>
     v !== null && typeof v === "object" && !Array.isArray(v)
