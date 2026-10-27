@@ -13,10 +13,10 @@ pnpm run sync:once --calendar cal-1
 ```
 
 ## What it should produce
-The dry-run plan carrying observations — row deltas read back from the store, the
-provider calls made, the git head before and after — all showing nothing
-happened. The live path exits 0 with `conflicts_quarantined=0` on a clean
-calendar.
+The dry-run plan carrying observations — row deltas read back from the store, each
+observed table's Dolt working-set hash, the provider calls made, the Dolt head
+before and after — all showing nothing happened. The live path exits 0 with
+`conflicts_quarantined=0` on a clean calendar.
 
 ## What breaks if it breaks
 Either the dry-run is not actually inert (and the first real run writes to a

@@ -83,8 +83,8 @@ pnpm run sync:once --calendar cal-1 --dry-run --json | tee /tmp/plan.json && pnp
 sync:verify-plan
   push: 0  pull: 0  quarantined: 2
   observed row deltas: {"calendar_period":0,"calendar_binding":0}
-  observed provider calls: PROPFIND,REPORT
-  git head unchanged: true
+  observed provider calls: none
+  dolt head unchanged: true
 
 sync:verify-plan PASSED: the plan is well-formed AND was not executed
 ```
