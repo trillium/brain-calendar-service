@@ -6,6 +6,7 @@
 // makes every call exit 1 with gog's "no tokens" complaint.
 
 import { appendFileSync } from "node:fs";
+import { runStateful } from "./fake-gog-state.mjs";
 
 const args = process.argv.slice(2);
 if (process.env.FAKE_GOG_LOG) appendFileSync(process.env.FAKE_GOG_LOG, `${JSON.stringify(args)}\n`);
@@ -57,6 +58,8 @@ for (const a of rest.filter((x) => x.startsWith("--") && !COMMON.includes(x))) {
 
 const out = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
 const flag = (name) => args.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
+
+if (runStateful(sub, positional, args, out)) process.exit(0);
 
 switch (sub) {
   case "events":

@@ -25,7 +25,7 @@ import type { Occurrence } from "../../domain/rfc5546/types.js";
 import { detectChanges, headCommit } from "../changedetection/plan.js";
 import { allow, assertPermitted, type SyncPolicy } from "../loop/policy.js";
 
-interface PlanPush {
+export interface PlanPush {
   beadId: string;
   externalUid: string;
   reason: string;
@@ -52,7 +52,7 @@ interface Observations {
   doltHeadAfter: string | null;
 }
 
-interface SyncPlan {
+export interface SyncPlan {
   calendarId: string;
   dryRun: boolean;
   cursorBefore: string | null;
@@ -63,6 +63,9 @@ interface SyncPlan {
   conflictsQuarantined: number;
   observations: Observations;
 }
+
+/** The cursor row is keyed by the database whose history it indexes. */
+export const SOURCE_DATABASE = "brain_calendar_service";
 
 const TEMPORAL_TABLES = ["calendar_period", "calendar_binding"] as const;
 const OBSERVED_TABLES = [...TEMPORAL_TABLES, "calendar_sync_cursor"] as const;
@@ -92,6 +95,8 @@ interface CycleInput {
   readonly calendarId: string;
   readonly provider: string;
   readonly remoteChanges: readonly Occurrence[];
+  /** True (the default) for a plan that will not be applied. */
+  readonly dryRun?: boolean;
   /** Read once the plan is built, so it reports the calls actually made. */
   readonly providerCalls: () =>
     | Promise<readonly { method: string }[]>
@@ -110,7 +115,7 @@ export const buildSyncPlan = async (input: CycleInput): Promise<SyncPlan> => {
 
   const [cursorRows] = await input.conn.query<RowDataPacket[]>(
     "SELECT last_synced_commit_hash FROM calendar_sync_cursor WHERE source_database = ? AND calendar_id = ?",
-    ["brain_calendar_service", input.calendarId],
+    [SOURCE_DATABASE, input.calendarId],
   );
   const cursorBefore = (cursorRows[0]?.last_synced_commit_hash as string | null) ?? null;
 
@@ -162,7 +167,7 @@ export const buildSyncPlan = async (input: CycleInput): Promise<SyncPlan> => {
 
   return {
     calendarId: input.calendarId,
-    dryRun: true,
+    dryRun: input.dryRun ?? true,
     cursorBefore,
     cursorAfter: cursorBefore,
     push,

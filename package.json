@@ -25,6 +25,7 @@
     "sync:replay": "tsx scripts/sync-replay.mts",
     "sync:converge": "tsx scripts/sync-converge.mts",
     "sync:measure": "tsx scripts/sync-measure.mts",
+    "calendar:register": "tsx scripts/calendar-register.mts",
     "sync:once": "tsx scripts/sync-once.mts",
     "sync:verify-plan": "tsx scripts/sync-verify-plan.mts",
     "mcp:smoke": "tsx scripts/mcp-smoke.mts",

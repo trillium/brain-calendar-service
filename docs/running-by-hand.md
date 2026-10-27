@@ -119,8 +119,9 @@ bash scripts/start-local-dolt.sh stop
 
 ## The minimal real calendar operation
 
-As of this commit there is no operation that creates, moves, or deletes an event
-on any calendar. That is [L3](#l3-there-is-no-write-path-to-a-calendar).
+As of this commit the only operation that writes to a calendar is the live
+`sync:once` push, which creates and updates events on one registered calendar and
+has only run against the fake gog. See [L3](#l3-the-push-path-exists-but-has-only-run-against-a-fake-gog-partly-resolved).
 
 The closest thing that genuinely happens today, and the one worth running first,
 is step 6 above: it registers a calendar with the store by writing its sync
@@ -211,13 +212,18 @@ Fixed in `4edba70`: the handler now parses its arguments against the object
 schema. Original finding: any object failed with `Invalid input`, because the
 handler parsed the whole arguments object against a schema for a single string.
 
-### L3: there is no write path to a calendar
+### L3: the push path exists but has only run against a fake gog (PARTLY RESOLVED)
 
-`buildSyncPlan` returns `dryRun: true` unconditionally, and `sync:once` without
-`--dry-run` only bootstraps the cursor before building the same plan. It never
-applies `push` or `pull`. Running the live path against a calendar that had
-changes would report a correct plan and write nothing, which is exactly the
-outcome that reads like success.
+`sync:once` without `--dry-run` now resolves `--calendar` through the
+`calendar_calendar` registry (`pnpm run calendar:register --remote-id <id> --name
+<label>`), builds the gog provider from `GOG_ACCOUNT` (and `GOG_BIN`), creates or
+updates one event per changed `calendar_period` on that registered calendar only,
+records a `calendar_binding` with a minted ownership token as a Dolt commit, and
+advances the cursor only after every push succeeded. Nothing is ever deleted. It
+is proven against `fixtures/gog/fake-gog.mjs` only; pull from the provider and
+self-echo handling are not built, so an edit made on the provider is not read back.
+A calendar with no cursor is baselined to the current Dolt head on its first live
+run, so a period must be proposed after that first run to be pushed.
 
 ### L4: the gog provider has never run against a live account
 
@@ -300,7 +306,6 @@ In order, and none of them are a task for this document:
 
 1. ~~Fix `list_changes` (L2).~~ Done.
 2. ~~Give the tools a real store (L1).~~ Done: the tools read and write Dolt.
-3. Build the apply path so `sync:once` without `--dry-run` does what its name
-   says (L3).
+3. ~~Build the push apply path (L3).~~ Done against the fake gog; pull is next.
 4. Log gog in for a test calendar and verify the provider live (L4).
 5. Only then point it at a calendar a human has named, and soak it.
