@@ -1,0 +1,49 @@
+{
+  "rounds": 6,
+  "conflictsPerRound": [0, 0, 0, 0, 0, 0],
+  "quarantined": 0,
+  "roundLog": [
+    {
+      "round": 1,
+      "conflicts": 0,
+      "quarantined": 0,
+      "pushes": 0,
+      "pulls": 0
+    },
+    {
+      "round": 2,
+      "conflicts": 0,
+      "quarantined": 0,
+      "pushes": 1,
+      "pulls": 0
+    },
+    {
+      "round": 3,
+      "conflicts": 0,
+      "quarantined": 0,
+      "pushes": 0,
+      "pulls": 0
+    },
+    {
+      "round": 4,
+      "conflicts": 0,
+      "quarantined": 0,
+      "pushes": 0,
+      "pulls": 1
+    },
+    {
+      "round": 5,
+      "conflicts": 0,
+      "quarantined": 0,
+      "pushes": 0,
+      "pulls": 0
+    },
+    {
+      "round": 6,
+      "conflicts": 0,
+      "quarantined": 0,
+      "pushes": 0,
+      "pulls": 0
+    }
+  ]
+}

@@ -19,6 +19,7 @@
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { serverEnv } from "../src/mcp/call-env.ts";
 
 // pnpm forwards the `--` separator itself on some versions, so drop it rather
 // than making the caller remember which form this repo's runner prefers.
@@ -33,6 +34,9 @@ const transport = new StdioClientTransport({
   command: "npx",
   args: ["tsx", "src/mcp/entry.ts"],
   cwd: process.cwd(),
+  // The SDK passes the child only a default environment; CALENDAR_DB_* and
+  // GOG_ACCOUNT/GOG_BIN must be handed over by name. No secret is forwarded.
+  env: serverEnv(process.env),
 });
 const client = new Client({ name: "mcp-call", version: "0.0.0" });
 await client.connect(transport);
