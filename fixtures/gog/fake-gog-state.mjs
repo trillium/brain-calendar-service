@@ -3,7 +3,8 @@
 // Off unless FAKE_GOG_STATE names a JSON file, so every existing test keeps the
 // canned answers. With it set, `create` stores an event (with its private
 // properties), `update` edits it, `delete` removes it, `events` and `raw` read it
-// back, and each calendar id is its own namespace - so a test can prove a write
+// back (`events` honoring --from/--to and --private-prop-filter), and each
+// calendar id is its own namespace - so a test can prove a write
 // never reached a calendar it was not allowed to touch.
 //
 // FAKE_GOG_FAIL_NTH=<sub>:<n> makes the n-th call to that subcommand (counted
@@ -33,6 +34,18 @@ const applyFlags = (event, args) => {
   event.etag = `"etag-${event.id}-${event.rev}"`;
 };
 
+/** Honors --from/--to (overlap, as Google does) and --private-prop-filter=key=value. */
+const listed = (event, args) => {
+  const [from] = flagValues(args, "from");
+  const [to] = flagValues(args, "to");
+  const [filter] = flagValues(args, "private-prop-filter");
+  if (from !== undefined && Date.parse(event.end?.dateTime) <= Date.parse(from)) return false;
+  if (to !== undefined && Date.parse(event.start?.dateTime) >= Date.parse(to)) return false;
+  if (filter === undefined) return true;
+  const eq = filter.indexOf("=");
+  return event.extendedProperties.private[filter.slice(0, eq)] === filter.slice(eq + 1);
+};
+
 const shouldFail = (state, sub) => {
   const [name, nth] = (process.env.FAKE_GOG_FAIL_NTH ?? ":").split(":");
   return name === sub && Number(nth) === state.calls[sub];
@@ -45,7 +58,7 @@ const handle = (state, sub, positional, args) => {
   const events = state.calendars[calendarId];
   switch (sub) {
     case "events":
-      return { events: Object.values(events), nextPageToken: "" };
+      return { events: Object.values(events).filter((e) => listed(e, args)), nextPageToken: "" };
     case "raw":
     case "update":
     case "delete": {

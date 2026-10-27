@@ -103,15 +103,7 @@ const create = async (ctx: Context, beadId: string, period: PeriodRow): Promise<
   const remote = ctx.calendar.remoteCalendarId;
   const draft = draftFor(period);
   const marker = markerValue(ctx.sourceDatabase, period.id);
-  const found = await viaProvider(async () =>
-    findMarked(
-      ctx.provider,
-      remote,
-      await ctx.provider.listEvents(remote, { from: draft.from, to: draft.to }),
-      marker,
-      draft,
-    ),
-  );
+  const found = await viaProvider(() => findMarked(ctx.provider, remote, marker));
   const token = found?.privateProperties[OWNER_KEY] ?? mintToken();
   const event =
     found === null

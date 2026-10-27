@@ -135,6 +135,9 @@ export const createGogProvider = (options: GogProviderOptions): CalendarProvider
         ...(window.from !== undefined ? [`--from=${window.from}`] : []),
         ...(window.to !== undefined ? [`--to=${window.to}`] : []),
         ...(window.max !== undefined ? [`--max=${window.max}`] : []),
+        ...(window.privateProperty !== undefined
+          ? [`--private-prop-filter=${window.privateProperty.key}=${window.privateProperty.value}`]
+          : []),
       ];
       return parseEvents(await call("events", flags, [calendarId]));
     },

@@ -29,7 +29,7 @@ const WRITE = [
   "send-updates",
 ];
 const ALLOWED = {
-  events: ["all-pages", "from", "to", "max"],
+  events: ["all-pages", "from", "to", "max", "private-prop-filter"],
   raw: [],
   create: [...WRITE, "timezone"],
   update: [...WRITE, "start-timezone", "end-timezone"],

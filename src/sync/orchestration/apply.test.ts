@@ -77,7 +77,11 @@ const day = (n: number, summary: string) => ({
 
 /** One round: plan, then apply to the throwaway calendar. */
 const round = async (
-  over: { provider?: CalendarProvider; policy?: ReturnType<typeof pushPolicy> } = {},
+  over: {
+    provider?: CalendarProvider;
+    policy?: ReturnType<typeof pushPolicy>;
+    conn?: Connection;
+  } = {},
 ) => {
   const plan = await buildSyncPlan({
     conn,
@@ -88,7 +92,7 @@ const round = async (
     dryRun: false,
   });
   const result = await applyPlan({
-    conn,
+    conn: over.conn ?? conn,
     provider: over.provider ?? provider(),
     plan,
     policy: over.policy ?? pushPolicy("google", THROWAWAY),
@@ -228,6 +232,35 @@ describe("create", () => {
     expect(remoteEvents(THROWAWAY)).toHaveLength(1);
     const [bindings] = await conn.query<RowDataPacket[]>("SELECT * FROM calendar_binding");
     expect(bindings[0]?.ownership_token).toBe("b".repeat(48));
+  });
+
+  it("adopts, not duplicates, a create whose binding failed even after the period moved", async () => {
+    await store.addPeriods([day(1, "standup")]);
+    const noBindings = new Proxy(conn, {
+      get(target, prop) {
+        const value = Reflect.get(target, prop);
+        if (prop !== "query") return typeof value === "function" ? value.bind(target) : value;
+        return (sql: string, ...rest: unknown[]) =>
+          sql.includes("INSERT INTO calendar_binding")
+            ? Promise.reject(new Error("binding write lost"))
+            : target.query(sql, ...(rest as []));
+      },
+    });
+    const before = await cursor();
+    const first = await round({ conn: noBindings });
+    expect(failedOf(first.result)).toMatchObject({ kind: "store", created: 0 });
+    expect(state().calls.create).toBe(1);
+    expect(await cursor()).toBe(before);
+
+    await store.movePeriod("standup", "2026-04-01T15:00:00Z");
+    const { result } = await round();
+    expect(result).toMatchObject({ state: "ok", created: 0, adopted: 1 });
+    expect(state().calls.create).toBe(1);
+    expect(remoteEvents(THROWAWAY)).toHaveLength(1);
+    expect(remoteEvents(THROWAWAY)[0]?.start.dateTime).toBe("2026-04-01T15:00:00Z");
+    const [bindings] = await conn.query<RowDataPacket[]>("SELECT * FROM calendar_binding");
+    expect(bindings).toHaveLength(1);
+    expect(bindings[0]?.external_uid).toBe(remoteEvents(THROWAWAY)[0]?.id);
   });
 
   it("adopts an event that was created but never bound, instead of duplicating it", async () => {

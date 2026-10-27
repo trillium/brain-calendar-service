@@ -48,28 +48,26 @@ export const draftFor = (period: PeriodRow): EventDraft => ({
   to: period.endUtc,
 });
 
+/** Wide and explicit, so the search never depends on the provider's default range. */
+const MARKER_WINDOW = { from: "2000-01-01", to: "2100-01-01" } as const;
+
 /**
- * Look for an event this service already created for `marker`. A listing may omit
- * extended properties, so an event that matches on summary and start but shows no
- * marker is read back through the lossless `getEvent` before it is ruled out.
+ * Look for an event this service already created for `marker`, by the marker
+ * itself rather than by the period's current time, so a period moved since its
+ * create was landed is still found. A listing may omit extended properties, so
+ * each hit is read back through the lossless `getEvent` and confirmed there.
  */
 export const findMarked = async (
   provider: CalendarProvider,
   remoteCalendarId: string,
-  listed: readonly ProviderEvent[],
   marker: string,
-  draft: EventDraft,
 ): Promise<ProviderEvent | null> => {
-  const hit = listed.find((e) => e.privateProperties[MARKER_KEY] === marker);
-  if (hit !== undefined) return hit;
-  const candidates = listed.filter(
-    (e) =>
-      e.privateProperties[MARKER_KEY] === undefined &&
-      e.summary === draft.summary &&
-      Date.parse(e.start?.dateTime ?? "") === Date.parse(draft.from ?? ""),
-  );
-  for (const candidate of candidates) {
-    const full = await provider.getEvent(remoteCalendarId, candidate.id);
+  const hits = await provider.listEvents(remoteCalendarId, {
+    ...MARKER_WINDOW,
+    privateProperty: { key: MARKER_KEY, value: marker },
+  });
+  for (const hit of hits) {
+    const full = await provider.getEvent(remoteCalendarId, hit.id);
     if (full.privateProperties[MARKER_KEY] === marker) return full;
   }
   return null;
