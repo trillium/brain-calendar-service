@@ -139,8 +139,7 @@ describe("tool writes reach the sync engine", () => {
         calendarId: "1",
         provider: "google",
         remoteChanges: [],
-        providerCalls: [],
-        gitHead: () => null,
+        providerCalls: () => [],
       });
       expect(plan.push.map((p) => p.beadId)).toEqual([
         expect.stringMatching(/^row:calendar_period:\d+$/),

@@ -8,8 +8,8 @@
 // A dry-run writes nothing to Dolt and nothing to a provider, and the plan it
 // emits carries the OBSERVATIONS that prove it, not a promise that it did.
 
-import { execSync } from "node:child_process";
 import { createConnection } from "mysql2/promise";
+import { execRunner, recordingRunner } from "../src/adapters/gog/runner.ts";
 import { buildSyncPlan } from "../src/sync/orchestration/plan.ts";
 
 const args = process.argv.slice(2);
@@ -31,14 +31,6 @@ if (!Number.isInteger(calendarIdNumber)) {
 }
 const dryRun = flag("dry-run");
 const json = flag("json");
-const gitHead = () => {
-  try {
-    return execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
-  } catch {
-    return null;
-  }
-};
-
 const conn = await createConnection({
   host: process.env.CALENDAR_DB_HOST ?? "127.0.0.1",
   port: Number(process.env.CALENDAR_DB_PORT ?? 3399),
@@ -72,25 +64,20 @@ try {
     }
   }
 
+  // A pure dry-run asks gog for nothing, so the log is empty; a provider built
+  // here must take its runner from the recorder so the log stays real.
+  const recorder = recordingRunner(execRunner(process.env.GOG_BIN ?? "gog"));
   const plan = await buildSyncPlan({
     conn,
     calendarId: String(calendarIdNumber),
     provider: "google",
     remoteChanges: [],
-    providerCalls: [{ method: "PROPFIND" }, { method: "REPORT" }],
-    gitHead,
+    providerCalls: () => recorder.calls,
   });
 
   // Every planned write carries its idempotency key, so a replay is safe.
   plan.push = plan.push.map((p, i) => ({ ...p, idempotencyKey: `${p.beadId}:${i}` }));
   plan.pull = plan.pull.map((p, i) => ({ ...p, idempotencyKey: `${p.externalUid}:${i}` }));
-
-  // OBSERVED row deltas, read back from the store rather than asserted.
-  for (const table of Object.keys(plan.observations.rowDeltas)) {
-    const [rows] = await conn.query(`SELECT COUNT(*) AS n FROM \`${table}\``);
-    plan.observations.rowDeltas[table] = Number(rows[0].n) === 0 ? 0 : 0;
-  }
-  plan.observations.gitHeadAfter = gitHead();
 
   if (json) {
     console.log(JSON.stringify(plan, null, 2));

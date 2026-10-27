@@ -21,21 +21,24 @@ type DetectionState =
   | { readonly state: "ok"; readonly changedIds: readonly number[] }
   | { readonly state: "full_resync_required"; readonly reason: string };
 
-interface DiffRow extends RowDataPacket {
-  to_id: number | null;
-  to_period_start_utc: Date | string | null;
-  to_period_end_utc: Date | string | null;
-  from_id: number | null;
-  from_period_start_utc: Date | string | null;
-  from_period_end_utc: Date | string | null;
-}
+type DiffRow = RowDataPacket;
+
+// The columns whose change means something for the calendar, per table. Bookkeeping
+// columns (created_at, updated_at, external_sequence and the last_synced_* columns)
+// are left out on purpose: they are what a sync writes when it records a round, and
+// recording a sync is not an edit. A table not listed here is a period-shaped table.
+const PERIOD_COLUMNS = ["period_start_utc", "period_end_utc"] as const;
+const WATCHED_COLUMNS: Record<string, readonly string[]> = {
+  calendar_period: PERIOD_COLUMNS,
+  calendar_binding: ["bead_id", "calendar_id", "external_uid", "ownership_token"],
+};
 
 /**
  * Which rows changed between `fromCommit` and HEAD, and whether any of those
  * changes are actually temporal.
  *
- * A row whose ONLY change is to a non-temporal column produces zero calendar
- * writes: renaming a period or re-linking it to a different bead does not move
+ * A row whose ONLY change is to a column that is not watched for its table produces
+ * zero calendar writes: renaming a period or recording a sync round does not move
  * anything on anybody's calendar, and treating it as a change is how a sync
  * engine starts writing events nobody edited.
  */
@@ -71,9 +74,9 @@ export const detectChanges = async (
   for (const row of rows) {
     const id = row.to_id ?? row.from_id;
     if (id === null || id === undefined) continue;
-    const moved =
-      String(row.to_period_start_utc ?? "") !== String(row.from_period_start_utc ?? "") ||
-      String(row.to_period_end_utc ?? "") !== String(row.from_period_end_utc ?? "");
+    const moved = (WATCHED_COLUMNS[table] ?? PERIOD_COLUMNS).some(
+      (col) => String(row[`to_${col}`] ?? "") !== String(row[`from_${col}`] ?? ""),
+    );
     if (moved) changedIds.add(Number(id));
   }
 

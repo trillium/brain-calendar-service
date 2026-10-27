@@ -179,6 +179,54 @@ describe("change detection over dolt history and diff", () => {
   });
 });
 
+// Regression: detectChanges used to compare period columns that calendar_binding does
+// not have, so every binding row compared equal and binding edits were never seen.
+describe("change detection on calendar_binding", () => {
+  const BEAD = "brain-binding-regression";
+  const stamp = "2026-01-01 00:00:00";
+  const commitBinding = async (message: string) => {
+    await conn.query("CALL DOLT_ADD('-A', 'calendar_binding')");
+    await conn.query("CALL DOLT_COMMIT('--allow-empty', '-m', ?)", [message]);
+  };
+
+  afterAll(async () => {
+    await conn.query("DELETE FROM calendar_binding WHERE bead_id = ?", [BEAD]);
+    await commitBinding("binding regression cleanup");
+  });
+
+  it("detects a changed external uid, and ignores bookkeeping-only edits", async () => {
+    const [inserted] = await conn.query(
+      `INSERT INTO calendar_binding
+         (bead_id, calendar_id, external_uid, external_sequence, created_at, updated_at)
+       VALUES (?, 990001, 'evt-binding@example.com', 0, ?, ?)`,
+      [BEAD, stamp, stamp],
+    );
+    const id = (inserted as { insertId: number }).insertId;
+    await commitBinding("binding regression insert");
+    const cursor = await headCommit(conn);
+
+    // Exactly what a sync writes when it records a round.
+    await conn.query(
+      `UPDATE calendar_binding
+         SET external_sequence = 1, last_synced_commit_hash = ?, last_synced_etag = ?,
+             last_synced_dtstamp = ?, updated_at = ?
+       WHERE id = ?`,
+      [cursor, '"etag-1"', "2026-02-02 00:00:00", "2026-02-02 00:00:00", id],
+    );
+    await commitBinding("binding bookkeeping only");
+    const quiet = await detectChanges(conn, "calendar_binding", cursor);
+    expect(quiet.state === "ok" && quiet.changedIds).toEqual([]);
+
+    await conn.query("UPDATE calendar_binding SET external_uid = ? WHERE id = ?", [
+      "evt-binding-moved@example.com",
+      id,
+    ]);
+    await commitBinding("binding external uid edit");
+    const changed = await detectChanges(conn, "calendar_binding", cursor);
+    expect(changed.state === "ok" && changed.changedIds).toEqual([id]);
+  });
+});
+
 describe("sync:replay", () => {
   const fixture = {
     name: "unit",
