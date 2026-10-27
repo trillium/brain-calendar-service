@@ -9,7 +9,7 @@
 //      both a push and a pull, no write is issued for an unchanged pair, and
 //      every external write carries an idempotency key.
 //   2. the plan was NOT EXECUTED: observed row deltas are zero, no mutating
-//      provider method was called, and the git head did not move.
+//      provider method was called, and the Dolt head did not move.
 //
 // A dry-run that only proves job 1 proves that a flag was honoured. Job 2 is
 // what proves nothing happened.
@@ -31,8 +31,8 @@ interface Plan {
   observations: {
     rowDeltas: Record<string, number>;
     providerCalls: { method: string }[];
-    gitHeadBefore: string | null;
-    gitHeadAfter: string | null;
+    doltHeadBefore: string | null;
+    doltHeadAfter: string | null;
   };
 }
 
@@ -77,14 +77,17 @@ for (const p of [...plan.push, ...plan.pull]) {
 for (const [table, delta] of Object.entries(plan.observations.rowDeltas)) {
   if (delta !== 0) failures.push(`dry-run changed ${delta} row(s) in ${table}`);
 }
-const MUTATING = new Set(["PUT", "DELETE", "POST"]);
+// gog verbs (create, update, delete, move) and the HTTP verbs a raw transport uses.
+const MUTATING_PREFIXES = ["put", "post", "patch", "delete", "create", "update", "move"];
+const isMutating = (method: string) =>
+  MUTATING_PREFIXES.some((p) => method.toLowerCase().startsWith(p));
 for (const call of plan.observations.providerCalls) {
-  if (MUTATING.has(call.method)) {
+  if (isMutating(call.method)) {
     failures.push(`dry-run issued a mutating provider call: ${call.method}`);
   }
 }
-if (plan.observations.gitHeadBefore !== plan.observations.gitHeadAfter) {
-  failures.push("dry-run moved the git head");
+if (plan.observations.doltHeadBefore !== plan.observations.doltHeadAfter) {
+  failures.push("dry-run moved the Dolt head");
 }
 if (plan.dryRun !== true) failures.push("this is not a dry-run plan; use the live command instead");
 
@@ -97,7 +100,7 @@ console.log(
   `  observed provider calls: ${plan.observations.providerCalls.map((c) => c.method).join(",") || "none"}`,
 );
 console.log(
-  `  git head unchanged: ${plan.observations.gitHeadBefore === plan.observations.gitHeadAfter}`,
+  `  dolt head unchanged: ${plan.observations.doltHeadBefore === plan.observations.doltHeadAfter}`,
 );
 
 if (failures.length > 0) {

@@ -57,3 +57,16 @@ export const subcommandOf = (args: readonly string[]): string => {
   const rest = args.slice(args.indexOf("calendar") + 1);
   return rest.find((a, i) => !a.startsWith("-") && rest[i - 1] !== "-a") ?? "?";
 };
+
+/**
+ * Wrap a runner so every call it is asked to make is recorded, by calendar
+ * subcommand. The record is what a plan's provider-call observation is read from.
+ */
+export const recordingRunner = (inner: GogRunner) => {
+  const calls: { method: string }[] = [];
+  const runner: GogRunner = (args) => {
+    calls.push({ method: subcommandOf(args) });
+    return inner(args);
+  };
+  return { runner, calls };
+};

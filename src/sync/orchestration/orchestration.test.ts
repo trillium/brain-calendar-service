@@ -4,15 +4,13 @@
 // worth anything if a violation is detectable, so these tests deliberately
 // violate each guarantee and confirm the gate catches it.
 
-import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import type { RowDataPacket } from "mysql2";
 import type { Connection } from "mysql2/promise";
 import { createConnection } from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { config } from "../../adapters/dolt/config.mjs";
 import { buildSyncPlan } from "./plan.js";
-
-const gitHead = () => execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
 
 let conn: Connection;
 
@@ -24,14 +22,13 @@ afterAll(async () => {
   await conn?.end();
 });
 
-const cycle = async (calls: { method: string }[] = [{ method: "PROPFIND" }]) =>
+const cycle = async (calls: () => { method: string }[] = () => []) =>
   buildSyncPlan({
     conn,
     calendarId: "cal-1",
     provider: "google",
     remoteChanges: [],
     providerCalls: calls,
-    gitHead,
   });
 
 describe("a cycle plans before it writes", () => {
@@ -50,14 +47,40 @@ describe("a cycle plans before it writes", () => {
     for (const delta of Object.values(plan.observations.rowDeltas)) expect(delta).toBe(0);
   });
 
-  it("records the provider calls it made, read-only only", async () => {
-    const plan = await cycle([{ method: "PROPFIND" }, { method: "REPORT" }]);
-    expect(plan.observations.providerCalls.map((c) => c.method)).toEqual(["PROPFIND", "REPORT"]);
+  it("reads provider calls from what was actually recorded", async () => {
+    const plan = await cycle(() => [{ method: "events" }, { method: "get" }]);
+    expect(plan.observations.providerCalls.map((c) => c.method)).toEqual(["events", "get"]);
+    expect((await cycle()).observations.providerCalls).toEqual([]);
   });
 
-  it("does not move the git head", async () => {
+  it("observes a row written during the cycle as a non-zero delta", async () => {
+    const ts = "2099-01-01 00:00:00";
+    try {
+      const plan = await buildSyncPlan({
+        conn,
+        calendarId: "cal-1",
+        provider: "google",
+        remoteChanges: [],
+        providerCalls: async () => {
+          await conn.query(
+            `INSERT INTO calendar_period
+               (grain, period_start_utc, period_end_utc, attributes_json, created_at, updated_at)
+             VALUES ('day', ?, ?, '{}', ?, ?)`,
+            [ts, ts, ts, ts],
+          );
+          return [];
+        },
+      });
+      expect(plan.observations.rowDeltas.calendar_period).toBe(1);
+    } finally {
+      await conn.query("DELETE FROM calendar_period WHERE period_start_utc = ?", [ts]);
+    }
+  });
+
+  it("reports the Dolt head, unmoved by a plan", async () => {
     const plan = await cycle();
-    expect(plan.observations.gitHeadAfter).toBe(plan.observations.gitHeadBefore);
+    expect(plan.observations.doltHeadBefore).toMatch(/^[0-9a-v]{32}$/);
+    expect(plan.observations.doltHeadAfter).toBe(plan.observations.doltHeadBefore);
   });
 
   it("quarantines a full resync rather than silently diffing nothing", async () => {
@@ -71,7 +94,7 @@ describe("a cycle plans before it writes", () => {
 
 describe("quarantine has no automatic exit", () => {
   it("produces a sink with no promotion step in the module", async () => {
-    const source = execSync("cat src/sync/orchestration/plan.ts", { encoding: "utf8" });
+    const source = readFileSync("src/sync/orchestration/plan.ts", "utf8");
     expect(source).not.toMatch(/resolved\s*[:=]\s*true/);
     expect(source).not.toMatch(/UPDATE\s+calendar_conflict/i);
   });
@@ -85,8 +108,7 @@ describe("the write path is allowlisted", () => {
         calendarId: "cal-not-permitted",
         provider: "google",
         remoteChanges: [],
-        providerCalls: [],
-        gitHead,
+        providerCalls: () => [],
       }),
     ).resolves.toBeDefined(); // planning is allowed; APPLYING is not
   });
