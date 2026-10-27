@@ -94,11 +94,15 @@ than reporting an empty diff.
 
 **6. Make the first real change, and verify it independently.**
 ```sh
-pnpm run sync:once --calendar cal-1
+pnpm run calendar:register --remote-id <throwaway calendar id> --name throwaway
+GOG_ACCOUNT=<address> pnpm run sync:once --calendar <throwaway calendar id>
 ```
-This is the one command in the whole service that writes a durable row. Before
-it, `calendar_sync_cursor` is empty; after it, there is one row. Check with a
-query that has nothing to do with the script that wrote it:
+The live path refuses a calendar that is not in `calendar_calendar`, so register
+it first; the register command never calls a provider. **UNVERIFIED** in this
+two-command form: the output below predates the registry, when a bare
+`--calendar cal-1` was accepted. Before `sync:once`, `calendar_sync_cursor` is
+empty; after it, there is one row. Check with a query that has nothing to do with
+the script that wrote it:
 ```sh
 node --input-type=module -e '
 import { createConnection } from "mysql2/promise";
@@ -124,7 +128,7 @@ As of this commit the only operation that writes to a calendar is the live
 has only run against the fake gog. See [L3](#l3-the-push-path-exists-but-has-only-run-against-a-fake-gog-partly-resolved).
 
 The closest thing that genuinely happens today, and the one worth running first,
-is step 6 above: it registers a calendar with the store by writing its sync
+is step 6 above: it registers a calendar in `calendar_calendar` and writes its sync
 cursor, so every later run has a baseline to diff against instead of demanding a
 full resync. You can see the difference by hand. On a fresh store, step 5 reports
 `"reason": "no cursor recorded yet"` twice. After step 6, run step 5 again and
