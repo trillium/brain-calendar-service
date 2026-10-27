@@ -28,7 +28,7 @@ error**. That marker is what makes writes idempotent, so a dropped key means
 duplicate events with nothing to report it.
 
 ## Known limitation
-Live behaviour is unverified: `gog auth list` showed no stored tokens on the
-build machine, so JSON shapes follow `gog calendar --help` and the Google
-Events resource, not an observed response. Verifying needs `gog auth add` for a
-dedicated test calendar. The default `sync:measure` runs against the fake.
+Live behaviour has been verified once, against one throwaway Google calendar;
+see L4 in [running-by-hand.md](../../../docs/running-by-hand.md) for what that
+run showed and what reproducing it needs. The default `sync:measure` runs
+against the fake.
