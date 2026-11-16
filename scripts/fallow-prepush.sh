@@ -10,8 +10,8 @@ if ! command -v fallow >/dev/null 2>&1 && ! npx --no-install fallow --version >/
   exit 0
 fi
 
-echo "Running fallow dead-code check on branch changes..."
-npx --no-install fallow dead-code --changed-since main --format json --quiet
+echo "Running fallow check on branch changes..."
+npx --no-install fallow check --changed-since main --format json --quiet
 
 status=$?
 if [ $status -ne 0 ]; then
