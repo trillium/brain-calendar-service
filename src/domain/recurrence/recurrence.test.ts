@@ -221,3 +221,63 @@ describe("the pinned table is a contract, not a convenience", () => {
     }
   });
 });
+
+describe("5. an open-ended rule (finding F3 of the real-calendar soak)", () => {
+  const LA = "America/Los_Angeles";
+  // "Every Tuesday", no COUNT and no UNTIL: the common shape, and the one that
+  // used to walk 1000 occurrences (about 19 years) past the pinned table and throw.
+  const weeklyTuesday = {
+    uid: "open-ended-tuesday",
+    dtstart: "2026-09-01T10:00:00",
+    zone: LA,
+    durationSeconds: 3600,
+    rrule: "FREQ=WEEKLY;BYDAY=TU",
+  };
+
+  it("expands without throwing and stops inside the pinned horizon", () => {
+    const all = expand(weeklyTuesday);
+    expect(all.length).toBeGreaterThan(100);
+    const last = Date.parse(all[all.length - 1].recurrenceIdUtc);
+    expect(last).toBeLessThan(Date.parse(`${HORIZON.end + 1}-01-01T00:00:00Z`));
+  });
+
+  it("still enforces the horizon on a bounded rule that really runs past it", () => {
+    expect(() => expand({ ...weeklyTuesday, rrule: "FREQ=WEEKLY;BYDAY=TU;COUNT=1500" })).toThrow(
+      OutOfHorizonError,
+    );
+  });
+
+  it("returns exactly the occurrences inside a window, across the DST end", () => {
+    const inWindow = expand({
+      ...weeklyTuesday,
+      window: { from: "2026-09-17T00:00:00Z", to: "2026-11-17T00:00:00Z" },
+    });
+    // The soak's window: 8 Tuesdays, spanning the 2026-11-01 fall-back.
+    expect(inWindow.map((o) => o.localStart.slice(0, 10))).toEqual([
+      "2026-09-22",
+      "2026-09-29",
+      "2026-10-06",
+      "2026-10-13",
+      "2026-10-20",
+      "2026-10-27",
+      "2026-11-03",
+      "2026-11-10",
+    ]);
+    for (const o of inWindow) expect(o.localStart.slice(11)).toBe("10:00:00");
+    expect(new Set(inWindow.map((o) => o.utcOffsetSeconds))).toEqual(new Set([-25200, -28800]));
+  });
+
+  it("treats the window as half-open: from is kept, to is not", () => {
+    const o = expand({
+      ...weeklyTuesday,
+      window: { from: "2026-09-22T17:00:00Z", to: "2026-09-29T17:00:00Z" },
+    });
+    expect(o.map((x) => x.recurrenceIdUtc)).toEqual(["2026-09-22T17:00:00.000Z"]);
+  });
+
+  it("rejects a window bound that is not an instant instead of ignoring it", () => {
+    expect(() => expand({ ...weeklyTuesday, window: { to: "next tuesday" } })).toThrow(
+      /window\.to/,
+    );
+  });
+});
