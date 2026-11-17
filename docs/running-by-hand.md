@@ -211,7 +211,7 @@ itself and never print, copy, log or commit them. Always pass the account too
 ## What this does not prove
 
 Found by running it, not by reading the tests. Each of these is invisible to the
-104 green tests.
+green tests.
 
 ### L1: no tool reads or writes the database (RESOLVED)
 
@@ -287,30 +287,21 @@ deletes an event. Reproducing this needs the sourced `~/.config/gog/env` describ
 under [Credentials and setup](#credentials-and-setup) and an account already added
 with `gog auth add` (a browser flow only the machine owner can do).
 
-### L5: running the test suite dirties tracked files
+### L5: running the test suite dirties tracked files (RESOLVED)
 
-`src/domain/rfc5546/emit-artifact.test.ts` rewrites
-`evidence/stage-02/artifact.json` in a different format from the committed copy.
-After `pnpm run test -- --run`:
-```
- M evidence/stage-02/artifact.json
-```
-and `pnpm run lint` then exits 1 on that file. Restore it with
-`git checkout -- evidence/stage-02/artifact.json` before committing. Other suites
-have left `.dolt/noms/journal.idx` modified the same way.
+`src/domain/rfc5546/emit-artifact.test.ts` now asserts the committed
+`evidence/stage-02/artifact.json` against a freshly executed copy instead of rewriting
+it, and the Dolt global setup resets the working set it owns. After a full
+`pnpm run test -- --run`, `git status` is clean (checked on 2026-11-16: 199 tests, 18
+files, no modified file). Original finding: the suite rewrote the artifact in a
+different format and left `.dolt/noms/journal.idx` modified.
 
-### L6: scoped test commands do not narrow
+### L6: scoped test commands do not narrow (RESOLVED)
 
-`pnpm run test -- src/adapters/gog --run` runs all 104 tests, not the 18 in
-that directory. pnpm forwards the `--`, and vitest then treats the filter as
-free text:
-```
-$ npx vitest -- src/adapters/gog --run   ->  Test Files 10, Tests 104
-$ npx vitest   src/adapters/gog --run     ->  Test Files  1, Tests  18
-```
-This is recorded in `evidence/stage-10/skips.md`. It makes every scoped stage
-gate in `canon-profile.json` a whole-suite run: stricter than intended, not
-looser. `npx vitest <path> --run` is the form that narrows.
+`scripts/test.mjs` drops the literal `--` pnpm forwards, so
+`pnpm run test -- src/adapters/gog --run` now runs only that directory (2 files, 30
+tests on 2026-11-16). Original finding: it ran the whole suite, so every scoped stage gate
+was a whole-suite run.
 
 ## More tests worth running
 

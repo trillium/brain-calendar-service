@@ -3,7 +3,9 @@
 MCP-facing calendar and temporal-planning service. Beads/Dolt is the authoritative
 planning layer; external calendars are two-way synced, not read-only inputs.
 
-This is a greenfield scaffold. Nothing here talks to a calendar yet.
+Calendar I/O goes through the gog CLI (it owns Google OAuth), with a Dolt store, an MCP
+tool surface and a push/pull sync round. What stands between this and a live service is in
+`docs/live-punch-list.md`.
 
 - Plan (11 stages, each with a command-gated exit condition): `brain-lg2t8`
 - Canonical project status: `status-ho6`

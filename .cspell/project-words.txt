@@ -108,3 +108,5 @@ vtimezoneShanghai
 xml
 Zod
 zodToJsonSchema
+plists
+uvan
