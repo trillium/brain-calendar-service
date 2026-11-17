@@ -5,17 +5,18 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { recordSoakRound } from "./soak.js";
+import { recordSoakRound, soakReportPath } from "./soak.js";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
 let dir: string;
 const file = () => join(dir, "evidence", "soak", "report.json");
 
 /** The report script reads a path relative to its working directory, as `pnpm run` runs it. */
-const report = () =>
+const report = (env: NodeJS.ProcessEnv = {}) =>
   spawnSync(join(ROOT, "node_modules/.bin/tsx"), [join(ROOT, "scripts/sync-soak-report.mts")], {
     cwd: dir,
     encoding: "utf8",
+    env: { ...process.env, SOAK_REPORT_PATH: "", ...env },
   });
 
 beforeEach(() => {
@@ -72,5 +73,24 @@ describe("sync:soak-report", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toMatch(/rounds: 2/);
     expect(result.stdout).toMatch(/sync:soak-report PASSED/);
+  });
+});
+
+describe("where the report lives", () => {
+  it("defaults to the committed evidence file under the root", () => {
+    expect(soakReportPath({}, "/repo")).toBe("/repo/evidence/soak/report.json");
+  });
+
+  it("honors SOAK_REPORT_PATH, so a live host does not dirty its checkout", () => {
+    expect(soakReportPath({ SOAK_REPORT_PATH: "/var/soak.json" }, "/repo")).toBe("/var/soak.json");
+  });
+
+  it("is what sync:soak-report reads when the variable is set", () => {
+    const elsewhere = join(dir, "elsewhere.json");
+    recordSoakRound(elsewhere, { conflicts: 0, quarantined: 0, pushes: 1, pulls: 0 });
+    expect(report().status).toBe(1);
+    const result = report({ SOAK_REPORT_PATH: elsewhere });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/rounds: 1/);
   });
 });

@@ -16,7 +16,6 @@
 // exits non-zero with the cursor held. Events that are not ours are reported and
 // never imported. Each live round appends one line to evidence/soak/report.json.
 
-import { join } from "node:path";
 import { createConnection } from "mysql2/promise";
 import { resolveCalendar } from "../src/adapters/dolt/calendar-registry.ts";
 import { config, ROOT } from "../src/adapters/dolt/config.mjs";
@@ -25,7 +24,7 @@ import { execRunner, recordingRunner } from "../src/adapters/gog/runner.ts";
 import type { ApplyResult } from "../src/sync/orchestration/apply.ts";
 import { SOURCE_DATABASE, type SyncPlan } from "../src/sync/orchestration/plan.ts";
 import { runRound } from "../src/sync/orchestration/round.ts";
-import { recordSoakRound, soakEntry } from "../src/sync/orchestration/soak.ts";
+import { recordSoakRound, soakEntry, soakReportPath } from "../src/sync/orchestration/soak.ts";
 
 const args = process.argv.slice(2);
 const flag = (n: string) => args.includes(`--${n}`);
@@ -35,7 +34,7 @@ const value = (n: string, fallback: string) => {
 };
 
 const PROVIDER = "google";
-const SOAK_REPORT = join(ROOT, "evidence", "soak", "report.json");
+const SOAK_REPORT = soakReportPath(process.env, ROOT);
 const dryRun = flag("dry-run");
 const json = flag("json");
 const conn = await createConnection(config);

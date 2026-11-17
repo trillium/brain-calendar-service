@@ -8,7 +8,7 @@
 // overwriting evidence is how a soak quietly loses its history.
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { z } from "zod";
 import type { ApplyResult } from "./apply.js";
 import type { SyncPlan } from "./plan.js";
@@ -29,6 +29,14 @@ const reportSchema = z.object({
 });
 
 type SoakRound = z.infer<typeof roundSchema>;
+
+/**
+ * Where the soak report lives: SOAK_REPORT_PATH when set, else the committed
+ * evidence/soak/report.json under `root`. A host that syncs live sets it so its
+ * checkout is not dirtied by every round.
+ */
+export const soakReportPath = (env: NodeJS.ProcessEnv, root: string): string =>
+  env.SOAK_REPORT_PATH || join(root, "evidence", "soak", "report.json");
 
 /** What a round did, in the soak report's terms. Applied counts, not planned ones. */
 export const soakEntry = (plan: SyncPlan, applied: ApplyResult): Omit<SoakRound, "round"> => ({
