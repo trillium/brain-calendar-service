@@ -33,6 +33,7 @@
     "scripts/*.mjs",
     "scripts/*.sh",
     "src/mcp/entry.ts",
+    "src/mcp/http-entry.ts",
     "fixtures/gog/fake-gog.mjs"
   ]
 }

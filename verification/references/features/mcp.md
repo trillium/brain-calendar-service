@@ -21,3 +21,9 @@ type-checks, reads as the modern API, publishes an empty schema and delivers zer
 arguments; a zero-argument tool still works, so a handshake-only smoke test
 passes while every real call fails. Use the four-argument `tool()` form. See
 `src/mcp/tools.ts` for the full note.
+
+## The HTTP entry
+`pnpm run mcp:http` serves the same tools over bearer-protected Streamable HTTP. It
+exits 78 without a valid `MCP_AUTH_TOKEN_FILE` / `MCP_AUTH_TOKEN` and answers 401
+to any `/mcp` request without the token. See `docs/mcp-auth.md`; driven by
+`src/mcp/http.test.ts`.
