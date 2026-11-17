@@ -33,7 +33,8 @@
     "size:check": "node scripts/size-check.mjs",
     "rollout:dry-run": "tsx scripts/rollout-dry-run.mts",
     "rollout:rollback-drill": "tsx scripts/rollout-rollback-drill.mts",
-    "sync:soak-report": "tsx scripts/sync-soak-report.mts"
+    "sync:soak-report": "tsx scripts/sync-soak-report.mts",
+    "gog:preflight": "tsx scripts/gog-preflight.mts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",

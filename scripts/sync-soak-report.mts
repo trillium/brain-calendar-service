@@ -10,10 +10,12 @@
 // it exits non-zero and says so.
 
 import { existsSync, readFileSync } from "node:fs";
+import { soakReportPath } from "../src/sync/orchestration/soak.ts";
 
 const i = process.argv.indexOf("--since");
 const since = i >= 0 ? (process.argv[i + 1] ?? "0d") : "0d";
-const soakFile = "evidence/soak/report.json";
+// Relative to the working directory by default, as `pnpm run` runs it.
+const soakFile = soakReportPath(process.env, ".");
 
 console.log(`sync:soak-report --since ${since}`);
 if (!existsSync(soakFile)) {
